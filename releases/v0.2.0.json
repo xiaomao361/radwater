@@ -1,0 +1,41 @@
+{
+  "name": "PocketFishing",
+  "version": "0.2.0",
+  "theme": "phosphor terminal / Listening Tide dossiers (no avatar)",
+  "target": "M5Stack Cardputer ADV / ESP32-S3",
+  "format": "app-only (M5Launcher)",
+  "firmware": "PocketFishing-ADV-v0.2.0.bin",
+  "bytes": 598000,
+  "sha256": "18b8b30255a6acee90f134c4fa87f9ca8254f6e5408f437c2d1d3b6939882fb9",
+  "static_ram_bytes": 120904,
+  "linked_flash_bytes": 597641,
+  "build_partition_bytes": 2097152,
+  "sd_journal": "/PocketFishing/catches-v1.pfj",
+  "record_bytes": 32,
+  "fish_parameter_combinations": 131072,
+  "object_parameter_combinations": 768,
+  "object_base_types": 24,
+  "generator_version": 2,
+  "readable_generator_versions": [
+    1,
+    2
+  ],
+  "object_dossiers": 48,
+  "linked_evidence_pages": 24,
+  "fish_family_dossiers": 8,
+  "dossier_pages": 3,
+  "follow_assist": true,
+  "verified": [
+    "native tests",
+    "static renderer outputs",
+    "ESP32-S3 build",
+    "app image header and SHA256"
+  ],
+  "unverified": [
+    "device installation",
+    "physical keyboard/display/audio",
+    "SD round-trip on device",
+    "battery life",
+    "human gameplay feel"
+  ]
+}
