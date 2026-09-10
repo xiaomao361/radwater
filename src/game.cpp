@@ -39,6 +39,25 @@ Catch generate(uint32_t seed, unsigned spot, unsigned version) {
 const char* bodyName(unsigned i) {
     static const char* n[] = {"溪鱼", "团鱼", "长尾鱼", "河豚", "带鱼", "角鱼", "扁鱼", "灯鱼"}; return n[i & 7];
 }
+const MethodProfile& methodProfile(Method method) {
+    static const MethodProfile profiles[] = {
+        {"浅水","F 浅水：多鱼",1.8f,2.6f,.85f,.14f,48},
+        {"贴底","F 贴底：旧物",2.6f,2.8f,.95f,.13f,36},
+        {"深水","F 深水：异常",3.0f,3.0f,1.0f,.11f,16}
+    };
+    return profiles[unsigned(method)];
+}
+Catch generateForMethod(uint32_t seed,unsigned spot,Method method) {
+    Catch first=generate(seed,spot);
+    Random choice(seed^0xa65d217bu);
+    // Select whole v2 candidates, retaining the selected seed and exact identity.
+    // No new record format: replaying generate(c.seed,c.spot,c.generator) still reproduces it.
+    if(method==Method::Shallow&&first.object()&&choice.below(2)==0)return generate(choice.next(),spot);
+    if(method==Method::Bottom&&!first.object()){
+        for(unsigned attempt=0;attempt<2;++attempt){Catch next=generate(choice.next(),spot);if(next.object())return next;}
+    }
+    return first;
+}
 const char* colorName(unsigned i) {
     static const char* n[] = {"薄荷", "珊瑚", "金砂", "靛蓝", "紫雾", "青瓷", "月白", "墨玉"}; return n[i & 7];
 }
@@ -90,11 +109,25 @@ bool decode(const uint8_t in[RecordBytes], uint32_t seq, Catch& c) {
 }
 bool Game::aligned() const { return std::fabs(fish - rod) <= zone(); }
 bool Game::nibble() const { return stage == Stage::Waiting && age > 0.9f && std::fmod(age, 1.3f) < 0.2f; }
+Anomaly chooseAnomaly(uint32_t seed, const Catch& caught, unsigned reflectionOdds) {
+    Random event(seed ^ 0x73c194e5u);
+    if (caught.object() && caught.objectType()==11 && event.below(3)==0) return Anomaly::FalseClock;
+    if (caught.object() && caught.objectType()==9 && event.below(3)==0) return Anomaly::FutureReport;
+    return event.below(reflectionOdds)==0 ? Anomaly::DoubleReflection : Anomaly::None;
+}
+bool Game::anomalyVisible() const {
+    if (anomaly==Anomaly::DoubleReflection) return stage==Stage::Waiting && age>=0.8f && age<1.6f;
+    return anomaly!=Anomaly::None && stage==Stage::Caught && age>=0.2f && age<3.0f;
+}
 void Game::lose(Loss why) { loss = why; stage = Stage::Lost; age = 0; }
 void Game::cast() {
-    caught = generate(random.next(), spot);
-    waitFor = 2.2f + random.below(2800) / 1000.0f;
-    biteWindow = 1.65f - 0.15f * caught.rarity();
+    const auto& profile=methodProfile(method);
+    caught = generateForMethod(random.next(), spot,method);
+    anomaly = Anomaly::None;
+    if (anomalyCooldown) --anomalyCooldown;
+    else { anomaly=chooseAnomaly(caught.seed,caught,profile.reflectionOdds); if(anomaly!=Anomaly::None)anomalyCooldown=3; }
+    waitFor = profile.waitBase + random.below(unsigned(profile.waitSpan*1000)) / 1000.0f;
+    biteWindow = (method==Method::Shallow?1.85f:1.65f) - 0.15f * caught.rarity();
     stage = Stage::Waiting; age = 0; paused = false;
 }
 void Game::tick(float seconds, const Input& in) {
@@ -106,13 +139,14 @@ void Game::tick(float seconds, const Input& in) {
     const bool read = in.read && !previous.read;
     const bool left = in.left && !previous.left;
     const bool right = in.right && !previous.right;
+    const bool changeMethod = in.method && !previous.method;
     previous = in;
     // An OS pause never advances an unseen fight by seconds at once.
     float dt = clamp(seconds, 0, 0.05f);
     if (stage == Stage::Dossier) {
         if (read || back || book) stage = dossierBook ? Stage::Book : Stage::Caught;
-        else if (action || right) dossierPage = (dossierPage + 1) % 3;
-        else if (left) dossierPage = (dossierPage + 2) % 3;
+        else if (action || right) dossierPage = (dossierPage + 1) % dossierPages;
+        else if (left) dossierPage = (dossierPage + dossierPages - 1) % dossierPages;
         return;
     }
     if (read && (stage == Stage::Book || stage == Stage::Caught)) {
@@ -123,6 +157,9 @@ void Game::tick(float seconds, const Input& in) {
     }
     if (stage == Stage::Help) { if (help || back || action) stage = beforeHelp; return; }
     if (stage == Stage::Book) { if (book || back) stage = Stage::Shore; return; }
+    if (changeMethod && (stage==Stage::Shore||stage==Stage::Caught||stage==Stage::Lost)) {
+        method=Method((unsigned(method)+1)%3);stage=Stage::Shore;age=0;return;
+    }
     if (back) {
         if (stage == Stage::Fight || stage == Stage::Waiting || stage == Stage::Bite) lose(Loss::Released);
         else stage = Stage::Shore;
@@ -165,6 +202,7 @@ void Game::tick(float seconds, const Input& in) {
         }
         float wanted = b == 2 ? 0.5f + 0.34f * std::sin(fightAge * 1.65f) : target;
         float speed = (b == 0 ? 0.18f : 0.34f) + 0.035f * caught.rarity();
+        speed *= methodProfile(method).fishSpeed;
         if (surging()) speed *= 1.6f;
         fish = clamp(fish + clamp(wanted - fish, -speed * dt, speed * dt), 0.08f, 0.92f);
         // Gentle line-follow assist removes mandatory A/D + Space chords on the tiny keyboard.
@@ -174,7 +212,7 @@ void Game::tick(float seconds, const Input& in) {
         const float heft = caught.object() ? 0.8f : clamp(caught.millimetres / 350.0f, 0.6f, 1.7f);
         if (in.action) {
             tension += dt * (surging() ? 0.53f : aligned() ? 0.085f + 0.035f * heft : 0.49f);
-            progress += dt * (aligned() ? 0.14f : -0.09f);
+            progress += dt * (aligned() ? methodProfile(method).reelRate : -0.09f);
         } else {
             tension -= dt * 0.48f;
             progress -= dt * 0.018f;

@@ -22,9 +22,11 @@ public:
 struct ViewState {
     SaveState save = SaveState::Missing;
     uint32_t discoveries = 0, savedCatches = 0, bookIndex = 0;
+    uint32_t knownObjects = 0, newAnnotations = 0;
     bool fresh = false, saved = false, sound = false, bookValid = false;
     Catch bookCatch;
 };
 void drawCatch(Canvas& c, const Catch& fish, int x, int y, int scale = 1);
+void syncDossierPages(Game& game, const ViewState& view);
 void draw(Canvas& canvas, const Game& game, const ViewState& view, uint32_t ms);
 }

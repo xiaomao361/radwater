@@ -36,6 +36,15 @@ struct Catch {
     unsigned rarity() const;
 };
 Catch generate(uint32_t seed, unsigned spot, unsigned version = GeneratorVersion);
+enum class Method { Shallow, Bottom, Deep };
+struct MethodProfile {
+    const char* name;
+    const char* hint;
+    float waitBase,waitSpan,fishSpeed,reelRate;
+    unsigned reflectionOdds;
+};
+const MethodProfile& methodProfile(Method method);
+Catch generateForMethod(uint32_t seed,unsigned spot,Method method);
 const char* bodyName(unsigned i);
 const char* colorName(unsigned i);
 const char* patternName(unsigned i);
@@ -49,11 +58,15 @@ uint32_t crc32(const uint8_t* bytes, size_t n);
 
 enum class Stage { Shore, Waiting, Bite, Fight, Caught, Lost, Book, Help, Dossier };
 enum class Loss { Early, Late, Broken, Escaped, Released };
+enum class Anomaly { None, DoubleReflection, FalseClock, FutureReport };
+// Event selection has its own RNG; it never changes catch generation or fight RNG.
+Anomaly chooseAnomaly(uint32_t seed, const Catch& caught, unsigned reflectionOdds = 40);
 struct Input {
     bool action = false, left = false, right = false;
     bool book = false, back = false, help = false, pause = false;
     int spot = -1;
     bool read = false;
+    bool method = false;
 };
 class Game {
 public:
@@ -62,13 +75,17 @@ public:
     Loss loss = Loss::Early;
     Catch caught;
     unsigned spot = 0;
+    Method method = Method::Shallow;
     bool paused = false, newCatch = false;
     float age = 0, waitFor = 0, biteWindow = 0, fightAge = 0;
     float fish = 0.5f, rod = 0.5f, progress = 0.18f, tension = 0.12f;
     float target = 0.5f, turnIn = 0, surgeIn = 0, surgeLeft = 0;
     unsigned landed = 0;
     unsigned dossierPage = 0;
+    unsigned dossierPages = 3;
     bool dossierBook = false;
+    Anomaly anomaly = Anomaly::None;
+    bool anomalyVisible() const;
     bool surging() const { return surgeLeft > 0; }
     float zone() const { return caught.object() ? 0.22f : 0.18f; }
     bool aligned() const;
@@ -79,6 +96,7 @@ private:
     Random random;
     Input previous;
     Stage beforeHelp = Stage::Shore;
+    unsigned anomalyCooldown = 0;
     void lose(Loss why);
 };
 }

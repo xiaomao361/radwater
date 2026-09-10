@@ -171,6 +171,7 @@ static void tests() {
 static void renders() {
     Game g(10);ViewState v;v.save=SaveState::Ready;v.discoveries=12;v.saved=true;v.fresh=true;
     snapshot("shore",g,v);
+    for(unsigned m=0;m<3;++m){g.method=Method(m);char name[40];std::snprintf(name,sizeof name,"method-%u",m);snapshot(name,g,v);}g.method=Method::Shallow;
     g.spot=2;snapshot("night",g,v);
     hook(g);g.fish=.64;g.rod=.56;g.progress=.57;g.tension=.6;snapshot("fight",g,v);
     g.surgeLeft=1;g.tension=.83;snapshot("surge",g,v);
@@ -178,10 +179,16 @@ static void renders() {
     g.stage=Stage::Caught;g.caught=generate(987,1);g.landed=3;snapshot("caught",g,v);
     g.stage=Stage::Help;snapshot("help",g,v);
     g.stage=Stage::Book;v.bookValid=true;v.bookCatch=generate(1034,0);v.bookIndex=5;snapshot("book",g,v);
+    g.stage=Stage::Waiting;g.age=1;g.anomaly=Anomaly::DoubleReflection;snapshot("event-reflection",g,v,1000);
+    g.stage=Stage::Caught;g.anomaly=Anomaly::FalseClock;g.caught.form=ObjectFlag+259;snapshot("event-clock",g,v);
+    g.anomaly=Anomaly::FutureReport;g.caught.form=ObjectFlag+257;snapshot("event-report",g,v);g.anomaly=Anomaly::None;
     g.stage=Stage::Dossier;g.dossierBook=false;
     const unsigned loreForms[]={ObjectFlag+257, ObjectFlag+259, ObjectFlag+262, ObjectFlag+516, ObjectFlag+518, ObjectFlag+519};
     for(unsigned n=0;n<6;++n){g.caught.form=loreForms[n];g.caught.spot=n%3;g.dossierPage=0;char name[40];std::snprintf(name,sizeof name,"lore-%u",n);snapshot(name,g,v);}
     for(unsigned page=1;page<3;++page){g.dossierPage=page;char name[40];std::snprintf(name,sizeof name,"lore-extra-%u",page);snapshot(name,g,v);}
+    g.caught.form=ObjectFlag+258;v.knownObjects=(1u<<10)|(1u<<16);g.dossierPage=3;syncDossierPages(g,v);snapshot("annotation-card-photo",g,v);
+    g.caught.form=ObjectFlag+257;v.knownObjects=(1u<<9)|(1u<<11);syncDossierPages(g,v);snapshot("annotation-tape-clock",g,v);
+    v.knownObjects=0;syncDossierPages(g,v);
     g.stage=Stage::Shore;v.save=SaveState::Missing;snapshot("no-sd",g,v);
     std::set<uint32_t> rasterHashes;
     uint16_t pixels[Width*Height];Canvas c(pixels);
@@ -210,4 +217,5 @@ static void renders() {
         if(n%6==0){draw(c,demo,v,n*1000/60);char path[100];std::snprintf(path,sizeof path,"build/frame-%03u.ppm",n/6);writePPM(path,pixels);}
     }
 }
-int main(){tests();renders();return 0;}
+void featureTests();
+int main(){tests();featureTests();renders();return 0;}

@@ -16,14 +16,16 @@ class Journal {
     uint8_t seen[MapBytes] = {};
     uint8_t scratch[MapBytes] = {};
     Storage* storage = nullptr;
+    uint32_t typesSeen = 0;
     static bool test(const uint8_t* map, uint32_t i) { return (map[i / 8] & (1u << (i % 8))) != 0; }
     static void mark(uint8_t* map, uint32_t i) { map[i / 8] |= uint8_t(1u << (i % 8)); }
 public:
     SaveState state = SaveState::Missing;
     uint32_t records = 0, discoveries = 0;
+    uint32_t knownObjectTypes() const { return typesSeen; }
     bool known(const Catch& c) const { return c.index() < FormCount && test(seen, c.index()); }
     void load(Storage& io) {
-        storage = &io; records = discoveries = 0; std::memset(seen, 0, sizeof seen);
+        storage = &io; records = discoveries = typesSeen = 0; std::memset(seen, 0, sizeof seen);
         uint32_t bytes = 0;
         if (!io.size(bytes)) { state = SaveState::Missing; return; }
         state = SaveState::Ready;
@@ -31,6 +33,7 @@ public:
         for (uint32_t pos = 0; uint64_t(pos) + RecordBytes <= bytes; pos += RecordBytes) {
             if (!io.read(pos, b, RecordBytes) || !decode(b, records + 1, c)) { state = SaveState::Corrupt; return; }
             if (!known(c)) { mark(seen, c.index()); ++discoveries; }
+            if (c.object()) typesSeen |= 1u << c.objectType();
             ++records;
         }
         if (bytes % RecordBytes) state = SaveState::Corrupt;
@@ -47,6 +50,7 @@ public:
             state = SaveState::WriteFailed; return false;
         }
         if (!known(c)) { mark(seen, c.index()); ++discoveries; }
+        if (c.object()) typesSeen |= 1u << c.objectType();
         ++records; return true;
     }
     bool discovery(uint32_t ordinal, Catch& out) {

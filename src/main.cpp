@@ -5,6 +5,7 @@
 #include "game.h"
 #include "journal.h"
 #include "view.h"
+#include "lore.h"
 
 using namespace pond;
 namespace {
@@ -59,6 +60,7 @@ void loadBook() {
 }
 void refreshView() {
     view.save = journal.state; view.discoveries = journal.discoveries; view.savedCatches = journal.records;
+    view.knownObjects = journal.knownObjectTypes();
 }
 }
 void setup() {
@@ -84,14 +86,14 @@ void loop() {
     in.action = keys.space || keys.enter;
     in.left = key('a') || key(','); in.right = key('d') || key('/');
     in.book = key('b'); in.back = keys.del || key('`');
-    in.help = key('h'); in.pause = key('p'); in.read = key('r');
+    in.help = key('h'); in.pause = key('p'); in.read = key('r'); in.method = key('f');
     // An empty or unreadable catalogue has no specimen dossier to open.
     if(game.stage==Stage::Book&&!view.bookValid)in.read=false;
     if(key('1'))in.spot=0;else if(key('2'))in.spot=1;else if(key('3'))in.spot=2;
     bool mute = key('m');
     if(mute&&!oldMute) { view.sound=!view.sound; if(view.sound) M5Cardputer.Speaker.tone(660,60); }
     oldMute=mute;
-    bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || mute || in.spot>=0;
+    bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || in.method || mute || in.spot>=0;
     if(active) lastInput=now;
     bool shouldDim=(now-lastInput>60000u)&&(game.stage==Stage::Shore||game.stage==Stage::Book||game.stage==Stage::Dossier||game.paused);
     if(shouldDim!=dim){dim=shouldDim;M5Cardputer.Display.setBrightness(dim?20:100);}
@@ -102,11 +104,14 @@ void loop() {
         if(moved)loadBook();
     }
     oldLeft=in.left;oldRight=in.right;
+    syncDossierPages(game,view);
     game.tick((now-lastTick)/1000.0f,in);lastTick=now;
     if(game.newCatch) {
+        const uint32_t before=unlockedAnnotations(journal.knownObjectTypes());
         view.fresh=!journal.known(game.caught);
         view.saved=journal.save(game.caught);
         game.newCatch=false;refreshView();
+        view.newAnnotations=unlockedAnnotations(view.knownObjects)&~before;
     }
     if(game.stage!=oldStage) {
         if(game.stage==Stage::Book&&oldStage!=Stage::Dossier){view.bookIndex=journal.discoveries?journal.discoveries-1:0;loadBook();}

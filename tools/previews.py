@@ -5,7 +5,7 @@ font = ImageFont.truetype(str(root/'build/NotoSansSC.ttf'), 17)
 panels = [('shore','水域侦测'),('bite','咬钩信号'),('fight','目标追踪'),('surge','张力警报'),('caught','捕获报告'),('book','标本档案')]
 sheet = Image.new('RGB',(1008,954),'#030a03')
 d=ImageDraw.Draw(sheet)
-d.text((24,12),'ANGLER / 口袋钓鱼 · 听潮档案 v0.2.0',font=font,fill='#baff89')
+d.text((24,12),'ANGLER / 口袋钓鱼 · 水面回声 v0.3.0',font=font,fill='#baff89')
 for i,(name,label) in enumerate(panels):
     x=24+(i%2)*492;y=50+(i//2)*300
     d.text((x,y),label,font=font,fill='#6ba54d')
@@ -33,9 +33,18 @@ for i,name in enumerate(pages):
     ld.text((x,y),label,font=font,fill='#6ba54d')
     lore.paste(Image.open(root/f'build/{name}.ppm').resize((480,270),Image.Resampling.NEAREST),(x,y+24))
 lore.save(root/'dist/lore.png')
+features=Image.new('RGB',(1008,1254),'#030a03')
+fd=ImageDraw.Draw(features)
+fd.text((24,12),'水面回声 / 事件示意与新玩法 · 同源静态渲染',font=font,fill='#baff89')
+feature_pages=[('method-0','浅水：鱼更多'),('method-1','贴底：旧物更多'),('method-2','深水：拉扯更久'),('event-reflection','偶发异常：双重倒影'),('event-clock','偶发异常：仪表错时'),('event-report','偶发异常：明日打捞'),('annotation-card-photo','凑齐工牌与照片后'),('annotation-tape-clock','凑齐录音带与怀表后')]
+for i,(name,label) in enumerate(feature_pages):
+    x=24+(i%2)*492;y=50+(i//2)*300
+    fd.text((x,y),label,font=font,fill='#6ba54d')
+    features.paste(Image.open(root/f'build/{name}.ppm').resize((480,270),Image.Resampling.NEAREST),(x,y+24))
+features.save(root/'dist/features.png')
 frames=[Image.open(p).resize((720,405),Image.Resampling.NEAREST) for p in sorted((root/'build').glob('frame-*.ppm'))]
 frames[0].save(root/'dist/gameplay.gif',save_all=True,append_images=frames[1:],duration=100,loop=0,optimize=False)
-for name in ['screens.png','specimens.png','objects.png','lore.png','gameplay.gif']:
+for name in ['screens.png','specimens.png','objects.png','lore.png','features.png','gameplay.gif']:
     source=root/'dist'/name
-    (root/'dist'/f'{source.stem}-v0.2.0{source.suffix}').write_bytes(source.read_bytes())
-print('dist/screens.png, specimens.png, objects.png, lore.png, gameplay.gif generated from firmware renderer')
+    (root/'dist'/f'{source.stem}-v0.3.0{source.suffix}').write_bytes(source.read_bytes())
+print('dist/screens.png, specimens.png, objects.png, lore.png, features.png, gameplay.gif generated from firmware renderer')

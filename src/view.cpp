@@ -215,14 +215,19 @@ static void scanFrame(Canvas& c,int x,int y,int w,int h) {
     for(int j=y+9;j<y+h;j+=10)c.line(x+2,j,x+w-3,j,grid);
     brackets(c,x,y,w,h,mint);
 }
+void syncDossierPages(Game& g,const ViewState& v) {
+    bool book=g.stage==Stage::Book||(g.stage==Stage::Dossier&&g.dossierBook);
+    g.dossierPages=(!book||v.bookValid)&&annotationFor(book?v.bookCatch:g.caught,v.knownObjects)?4:3;
+    if(g.dossierPage>=g.dossierPages)g.dossierPage=0;
+}
 void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
     char b[100];background(c);
     if(g.stage==Stage::Dossier) {
-        std::snprintf(b,sizeof b,"%u / 3",g.dossierPage+1);tabs(c,1,b);
+        std::snprintf(b,sizeof b,"%u / %u",g.dossierPage+1,g.dossierPages);tabs(c,1,b);
         if(g.dossierBook&&!v.bookValid) {
             c.center(57,"没有可读的标本档案",cream);footer(c,"R 返回图鉴");return;
         }
-        const auto page=dossier(g.dossierBook?v.bookCatch:g.caught,g.dossierPage);
+        const auto page=dossier(g.dossierBook?v.bookCatch:g.caught,g.dossierPage,v.knownObjects);
         c.text(8,23,page.title,gold);
         for(int i=0;i<6;++i)c.text(8,39+i*13,page.lines[i],i==0?muted:cream);
         footer(c,"空格翻页  R 返回");return;
@@ -233,15 +238,16 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
         c.text(9,57,"咬钩再按空格，自动跟鱼",cream);
         c.text(9,73,"按住空格收线，张力高松手",cream);
         c.text(9,90,"B 图鉴 R 档案 P 暂停",mint);
-        c.text(9,105,"1/2/3 水域 M 声音",muted);
+        c.text(9,105,"F 钓法 1/2/3 水域 M 音",muted);
         footer(c,"空格 / H 返回");return;
     }
     if(g.stage==Stage::Book || g.stage==Stage::Caught) {
         const bool book=g.stage==Stage::Book;const Catch& f=book?v.bookCatch:g.caught;
         tabs(c,1,book?"图鉴":!v.saved?"未存档":v.fresh?"新发现":"已记录");
         if(book)std::snprintf(b,sizeof b,"%lu / %lu",static_cast<unsigned long>(v.bookIndex+1),static_cast<unsigned long>(v.discoveries));
+        else if(g.anomalyVisible()&&g.anomaly==Anomaly::FalseClock)std::snprintf(b,sizeof b,"仪表 25:13");
         else std::snprintf(b,sizeof b,"本局 %u",g.landed);
-        c.text(8,23,book?"标本档案":"捕获报告 R 档案",gold);
+        c.text(8,23,book?"标本档案":v.newAnnotations?"新增批注 R 档案":"捕获报告 R 档案",gold);
         if(!book||v.bookValid)c.text(232-c.textWidth(b),23,b,muted);
         if(book&&!v.bookValid){brackets(c,20,43,200,55,grid);c.center(51,v.discoveries?"图鉴读取失败":"尚无标本记录",cream);c.center(75,"成功保存后加入图鉴",muted);footer(c,"B 返回水域");return;}
         scanFrame(c,8,41,102,61);drawCatch(c,f,63,70,1);
@@ -255,12 +261,15 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
             std::snprintf(b,sizeof b,"%lu.%lu cm",static_cast<unsigned long>(f.millimetres/10),static_cast<unsigned long>(f.millimetres%10));c.text(117,72,b,cream);
             std::snprintf(b,sizeof b,"习性 %s",behaviorName(f.behavior()));c.text(117,88,b,muted);
         }
-        std::snprintf(b,sizeof b,"ID %06lX",static_cast<unsigned long>(f.form));c.text(8,105,b,muted);
-        static const char* type[]={"常见特征","特殊特征","稀有特征"};c.text(117,105,type[f.rarity()],gold);
-        footer(c,book?"A/D 选标本 R 档案 B 返回":v.saved?"已保存 空格再钓 R 档案 B 图鉴":saveLabel(v.save));return;
+        if(!book&&g.anomalyVisible()&&g.anomaly==Anomaly::FutureReport)c.text(8,105,"本次打捞已于明日完成",gold);
+        else {
+            std::snprintf(b,sizeof b,"ID %06lX",static_cast<unsigned long>(f.form));c.text(8,105,b,muted);
+            static const char* type[]={"常见特征","特殊特征","稀有特征"};c.text(117,105,type[f.rarity()],gold);
+        }
+        footer(c,book?(annotationFor(f,v.knownObjects)?"A/D 选标本 R 有批注 B 返回":"A/D 选标本 R 档案 B 返回"):v.saved?"已保存 空格再钓 R 档案 B 图鉴":saveLabel(v.save));return;
     }
     tabs(c,0,g.paused?"暂停":g.stage==Stage::Fight?"追踪":g.stage==Stage::Bite?"咬钩":g.stage==Stage::Waiting?"侦测":"待命");
-    std::snprintf(b,sizeof b,"0%u / %s",g.spot+1,spotName(g.spot));c.text(8,23,b,gold);
+    std::snprintf(b,sizeof b,"0%u %s / %s",g.spot+1,spotName(g.spot),methodProfile(g.method).name);c.text(8,23,b,gold);
     std::snprintf(b,sizeof b,"发现 %lu",static_cast<unsigned long>(v.discoveries));c.text(232-c.textWidth(b),23,b,muted);
     if(g.stage==Stage::Fight){
         const int left=15,width=210,center=left+int(g.rod*width),fx=left+int(g.fish*width),half=int(g.zone()*width);
@@ -280,6 +289,10 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
             int by=g.stage==Stage::Bite?91:g.nibble()?85:80+int(std::sin(ms/230.0f)*2);
             c.line(131,49,165,by-5,muted);c.line(156,by+6,178,by+6,mint);
             c.rect(164,by-5,3,10,cream);c.rect(164,by-1,3,2,ink);
+            // Reflections stay below the float and vanish before the bite signal.
+            if(g.anomalyVisible()&&g.anomaly==Anomaly::DoubleReflection){
+                for(int dx:{-5,5}){c.line(165+dx,by+9,165+dx,by+13,mint);c.line(164+dx,by+16,166+dx,by+16,muted);}
+            }
             if(g.stage==Stage::Bite){c.rect(80,45,148,22,gold);c.text(89,50,"咬钩！现在按空格",ink);}
             else{c.rect(108,43,99,15,ink);c.text(111,44,g.nibble()?"试探中...":"等待信号...",mint);}
             footer(c,g.stage==Stage::Bite?"[ 空格提竿 ]":g.nibble()?"只是试探，继续等待":"等浮漂下沉  P 暂停");
@@ -289,9 +302,9 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
             c.text(57,52,"信号中断",cream);c.text(57,73,why[int(g.loss)],mint);
             footer(c,"空格再钓  B 图鉴");
         }else{
-            c.rect(110,43,109,17,ink);c.text(113,45,"水域侦测就绪",mint);
+            c.rect(110,43,122,17,ink);c.text(113,45,methodProfile(g.method).hint,mint);
             c.rect(54,104,179,13,ink);c.text(232-c.textWidth(saveLabel(v.save)),105,saveLabel(v.save),v.save==SaveState::Ready?muted:cream);
-            footer(c,"空格抛竿  B 图鉴  H 帮助");
+            footer(c,"空格抛竿 F 钓法 B 图鉴 H 帮助");
         }
     }
     if(g.paused){c.rect(44,43,152,58,ink);outline(c,44,43,152,58,gold);c.center(49,"垂钓已暂停",cream);c.center(68,"当前进度保留",mint);c.center(84,"P 继续",gold);}
