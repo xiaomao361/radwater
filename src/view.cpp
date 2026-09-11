@@ -231,7 +231,10 @@ static uint16_t fadeInk(uint16_t a,uint16_t b,float t){
 }
 // The quiet shore uses the existing framebuffer and primitives; no bitmap/video assets.
 static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
-    const float unfold=ease(g.arrivalAge/1.2f),sit=ease((g.arrivalAge-1.2f)/1.4f);
+    const float unfold=ease(g.arrivalAge/1.1f);
+    const bool seated=g.arrivalAge>=1.75f;
+    // Two coherent views, separated by a short fade, instead of stretching a chair into arms.
+    const float sit=seated?.86f+.14f*ease((g.arrivalAge-1.75f)/.85f):0.f;
     const int horizon=between(64,45,sit);
     const bool night=g.spot==2;
     const auto sky=night?rgb(45,61,64):g.spot==1?rgb(159,121,84):rgb(145,123,92);
@@ -283,29 +286,49 @@ static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
     for(int i=0;i<4;++i){c.line(3+i*4,bank,2+i*4,bank-12-i%2*4,ink);}
     c.line(4,bank+1,between(86,67,sit),bank-8,gold);c.line(4,bank+2,between(86,67,sit),bank-7,rust);
     c.ellipse(23,bank+1,4,4,rust);c.ellipse(23,bank+1,2,2,ink);
-    const int cx=between(111,202,sit),cy=between(109,118,sit);
+    const int cx=202,cy=between(109,118,sit);
     c.rect(cx-9,cy,30,20,ink);c.rect(cx-8,cy,29,3,wood);c.rect(cx-7,cy+4,27,15,grid);
     c.line(cx-7,cy+9,cx+18,cy+9,ink);c.line(cx-3,cy+4,cx-3,cy+18,wood);c.line(cx+14,cy+4,cx+14,cy+18,wood);
     c.rect(cx+9,cy-8,6,6,ink);c.rect(cx+10,cy-7,3,3,water);
     c.rect(cx-1,cy-10,11,10,cream);c.rect(cx-1,cy-11,11,2,ink);c.line(cx+1,cy-10,cx+7,cy-10,wood);
     c.rect(cx,cy-3,2,3,rust);c.pixel(cx+8,cy-8,wood);
-    // Backrest slides below the first-person viewpoint; the two arms remain at the edges.
-    int left=between(47,49,sit),right=between(between(52,82,unfold),191,sit);
-    int top=between(79,151,sit),seat=between(111,163,sit);
-    c.line(left-2,top-2,left+5,seat+15,rust);c.line(right+2,top-2,right-5,seat+15,rust);
-    c.triangle(left,top,right,top,left+4,seat-10,canvas);
-    c.triangle(right,top,left+4,seat-10,right-4,seat-10,canvas);
-    c.line(left,top,right,top,ink);c.line(left+4,seat-10,right-4,seat-10,wood);
-    c.line(left+4,seat-7,right-1,seat+13,rust);c.line(right-4,seat-7,left+1,seat+13,rust);
-    int armY=between(103,125,sit),armL=between(left-5,53,sit),armR=between(right+4,188,sit);
-    c.line(armL,armY,armL+12,armY-4,ink);c.line(armR,armY,armR-12,armY-4,ink);
-    c.line(armL,armY+1,armL+12,armY-3,canvas);c.line(armR,armY+1,armR-12,armY-3,canvas);
-    c.line(armL,armY+2,armL+4,armY+15,rust);c.line(armR,armY+2,armR-4,armY+15,rust);
-    if(sit>0){
-        int depth=int(9*sit);
-        c.triangle(armL,armY+1,armL+12,armY-3,armL+depth,armY+depth,canvas);
-        c.triangle(armR,armY+1,armR-12,armY-3,armR-depth,armY+depth,canvas);
+    if(!seated){
+        // X-frame rails keep a fixed length. Both feet spread around a fixed centre
+        // on the same ground plane; the seat lowers as the scissors open.
+        const int mid=80,footY=128;
+        const float span=6.f+26.f*unfold;
+        const int half=int(span*.5f),rise=int(std::sqrt(38.f*38.f-span*span));
+        const int l=mid-half,r=mid+half,seat=footY-rise;
+        // Rear frame (a small, constant perspective offset).
+        c.line(l+5,seat-3,r+5,footY-3,wood);c.line(r+5,seat-3,l+5,footY-3,wood);
+        c.line(l,seat,r,footY,rust);c.line(r,seat,l,footY,rust);
+        c.rect(l-2,footY,5,2,wood);c.rect(r-2,footY,5,2,wood);
+        c.pixel(mid,(seat+footY)/2,cream);
+        // A real seat surface and upright backrest, never a full-screen polygon.
+        c.triangle(l,seat,r,seat,r+5,seat-5,canvas);
+        c.triangle(l,seat,r+5,seat-5,l+5,seat-5,canvas);
+        c.line(l,seat,r,seat,ink);
+        c.line(l+5,seat-5,l+4,seat-30,rust);c.line(r+5,seat-5,r+6,seat-30,rust);
+        c.triangle(l+5,seat-28,r+5,seat-28,l+6,seat-7,canvas);
+        c.triangle(r+5,seat-28,l+6,seat-7,r+4,seat-7,canvas);
+        c.line(l+5,seat-28,r+5,seat-28,wood);
+        c.line(l+6,seat-8,r+4,seat-8,wood);
+        c.line(l-2,seat-6,l+5,seat-10,ink);c.line(r+1,seat-6,r+7,seat-10,ink);
+        c.line(l-2,seat-5,l+5,seat-9,canvas);c.line(r+1,seat-5,r+7,seat-9,canvas);
+        c.line(l-1,seat-5,l,seat+5,rust);c.line(r+1,seat-5,r,seat+5,rust);
+    }else{
+        const int drop=between(3,0,ease((g.arrivalAge-1.75f)/.85f));
+        // Independently drawn first-person arms: no backrest is pulled through the camera.
+        for(int side=0;side<2;++side){
+            int x=side?188:53,d=side?-1:1,y=125+drop;
+            c.triangle(x,y+1,x+d*12,y-3,x+d*9,y+9,canvas);
+            c.line(x,y,x+d*12,y-4,ink);c.line(x,y+2,x+d*4,y+15,rust);
+        }
     }
+    float shade=0;
+    if(g.arrivalAge>1.55f&&g.arrivalAge<1.75f)shade=ease((g.arrivalAge-1.55f)/.2f);
+    else if(g.arrivalAge>=1.75f&&g.arrivalAge<1.95f)shade=1-ease((g.arrivalAge-1.75f)/.2f);
+    if(shade>0)for(int i=0;i<Width*Height;++i)c.pixels[i]=fadeInk(c.pixels[i],ink,shade);
     if(g.arrivalGreeting&&g.shoreIdle>=2.6f&&g.shoreIdle<7){
         float opacity=clamp((g.shoreIdle-2.6f)/.6f,0,1)*clamp((7-g.shoreIdle)/1.5f,0,1);
         c.center(99,"坐会儿吧。",fadeInk(water,cream,opacity));

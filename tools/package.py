@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.2'
+version = '0.4.3'
 name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9

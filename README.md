@@ -10,15 +10,15 @@ A pocket-sized wasteland fishing game for **M5Stack Cardputer ADV**. Catch stran
 
 ## 开始钓鱼
 
-**当前版本：v0.4.2** · 坐会儿吧。
+**当前版本：v0.4.3** · 坐会儿吧。
 
-1. 下载 [Radwater-ADV-v0.4.2.bin](firmware/Radwater-ADV-v0.4.2.bin)。校验信息见 [固件清单](firmware/README.md)。
+1. 下载 [Radwater-ADV-v0.4.3.bin](firmware/Radwater-ADV-v0.4.3.bin)。校验信息见 [固件清单](firmware/README.md)。
 2. 把 BIN 放入已有 FAT32 SD 卡，例如 `/Games/`，在已有 **M5Launcher** 中选中安装。
 3. 空格抛竿，咬钩再按一次；按住收线，挣扎时松一下，再收上来。
 
 无需联网或额外资源文件。没有 SD 也能试钓，但不能保留收藏。镜像仅含 ESP32-S3 应用，不包含启动器或分区表。
 
-**升级先备份 `/PocketFishing/`。** 更名后保留原存档路径，v0.4.0、v0.4.1 与 v0.4.2 互相兼容；v0.3.0 及更早固件不支持新增的 v3 记录，回退需升级前副本。[完整安装与存档说明](docs/PLAYING.md)
+**升级先备份 `/PocketFishing/`。** 更名后保留原存档路径，v0.4.0、v0.4.1 与 v0.4.3 互相兼容；v0.3.0 及更早固件不支持新增的 v3 记录，回退需升级前副本。[完整安装与存档说明](docs/PLAYING.md)
 
 ![展开椅子，坐在水边（同源渲染）](assets/arrival.gif)
 
@@ -70,4 +70,4 @@ sh tools/test.sh
 - [故事连续性](docs/STORY.md)：**含剧透**，建议先玩。
 - [版本记录](CHANGELOG.md) · [第三方许可](THIRD_PARTY_NOTICES.md)。
 
-v0.4.0 已由作者在 ADV 上安装并反馈观感良好；v0.4.2 完成开场动画、同源渲染与自动化验证。小字、按键手感、音频、SD 突然断电与续航仍需要更多实际测试。
+v0.4.0 已由作者在 ADV 上安装并反馈观感良好；v0.4.3 完成开场动画、同源渲染与自动化验证。小字、按键手感、音频、SD 突然断电与续航仍需要更多实际测试。
