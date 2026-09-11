@@ -8,7 +8,7 @@
 | --- | --- |
 | `src/game.cpp` | 版本化生成器、短收线、事件选择、防重复、存档编解码 |
 | `src/main.cpp` | Cardputer 按键、屏幕、声音、SD 与阅读逻辑 |
-| `src/view.cpp` | 240×135 软件绘图，设备与主机共用 |
+| `src/view.cpp` | 240×135 软件绘图、安静岸边与椅子开场，设备与主机共用 |
 | `src/lore.cpp`、`src/events.cpp` | 原创鱼/物品故事、批注、随机事件 |
 | `include/journal.h`、`include/notebook.h` | 收藏与独立手记的追加式存储 |
 | `tests/` | ASan/UBSan、模拟存储、C++/Python 兼容样本与渲染 |
@@ -46,3 +46,9 @@ sh tools/test.sh > build/test-results.txt 2>&1
 显示名可改，`/PocketFishing/catches-v1.pfj` 与 `/PocketFishing/reading-v1.pfn` 继续保留。更名不是存档迁移。生成器 v1/v2/v3 的历史行为有回归样本；新版本修改规则时显式版本化。不要自动截断、清空或覆盖坏档。
 
 源码测试与编译不能代替真实设备验收。主机生成的图是渲染预览，不能标成设备截图。当前只明确支持 Cardputer ADV，未把普通 Cardputer 列为已验证目标。
+
+## 椅子开场
+
+`Game::arrivalAge` 和 `shoreIdle` 仅为本局显示状态，不写入存档、不消耗 RNG。开场由 1.2 秒展开和 1.4 秒坐下组成，输入立即跳过，继续处理原动作。`quietShore` 直接在既有 RGB565 帧缓冲中绘制，不加载概念图或视频，没有新增屏幕缓冲；窗口常亮，倒影和水纹缓慢变化。问候在 2.6–7 秒显示并淡出，提示在 7–12 秒出现；之后只留水岸。操作后提示显示 4 秒。
+
+`dist/arrival.gif` 是同一状态机和绘图函数产生的 15 秒放大预览，`rest-240x135.png` 为原分辨率。ASan/UBSan 覆盖三个场景、四种收藏保存状态和动画阶段。设备帧率、按键实际手感仍需真机验收。

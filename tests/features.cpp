@@ -182,4 +182,28 @@ static void notebookTests(){
     FeatureStorage invalid;Notebook bad;bad.load(invalid);s.bookmark=FormCount+1;assert(!bad.save(s)&&bad.state==SaveState::WriteFailed&&invalid.bytes.empty());
     std::cout<<"notebook: append/readback/reboot bookmark and history; last 12 events; response update; partial-write prefix read-only; missing SD and invalid fields cannot report saved\n";
 }
-void featureTests(){eventTests();annotationTests();methodTests();storyTests();notebookTests();}
+static void arrivalTests(){
+    Game rested(712),direct(712);
+    for(unsigned i=0;i<12000;++i)rested.tick(.05f,{});
+    assert(rested.stage==Stage::Shore&&rested.landed==0&&!rested.eventPending&&!rested.newCatch);
+    rested.tick(.01f,{true});direct.tick(.01f,{true});
+    uint8_t a[RecordBytes],b[RecordBytes];encode(rested.caught,1,a);encode(direct.caught,1,b);
+    assert(!std::memcmp(a,b,sizeof a)&&rested.waitFor==direct.waitFor&&rested.anomaly==direct.anomaly);
+    for(unsigned frame=0;frame<180;++frame){
+        Game g;for(unsigned i=0;i<frame;++i)g.tick(1.f/60,{});
+        g.tick(.01f,{true});assert(g.stage==Stage::Waiting&&!g.arrivalGreeting&&g.arrivalAge==2.6f);
+        // Holding the skip/cast key is still not a new bite press.
+        for(unsigned i=0;i<200;++i)g.tick(.05f,{true});assert(g.stage==Stage::Bite&&g.paused);
+    }
+    for(bool help:{false,true}){
+        Game g;Input in;if(help)in.help=true;else in.book=true;
+        g.tick(.01f,in);assert(g.stage==(help?Stage::Help:Stage::Book));
+        g.tick(.01f,{});g.tick(.01f,in);assert(g.stage==Stage::Shore&&!g.arrivalGreeting&&g.arrivalAge==2.6f);
+    }
+    Game g;Input change;change.spot=2;change.method=true;g.tick(.01f,change);
+    assert(g.arrivalAge==2.6f&&!g.arrivalGreeting&&g.method==Method::Bottom);
+    change.method=false;g.tick(.01f,change);assert(g.spot==2);
+    Input device;device.activity=true;Game resume;resume.tick(.01f,device);assert(!resume.arrivalGreeting);
+    std::cout<<"quiet arrival: 600s idle without catch/event; same RNG/record; immediate cast across 180 entrance frames; held-key bite protection; modal return and device shortcuts\n";
+}
+void featureTests(){eventTests();annotationTests();methodTests();storyTests();notebookTests();arrivalTests();}

@@ -222,6 +222,104 @@ static void scene(Canvas& c,const Game& g,const ViewState& v){
     c.triangle(0,106,75,119,0,119,ink);c.line(15,116,108,60,gold);c.line(15,117,109,61,rust);
     c.ellipse(20,111,5,5,rust);c.ellipse(20,111,2,2,ink);
 }
+static float ease(float t){t=clamp(t,0,1);return t*t*(3-2*t);}
+static int between(int a,int b,float t){return a+int((b-a)*t);}
+static uint16_t fadeInk(uint16_t a,uint16_t b,float t){
+    return uint16_t(between((a>>11)&31,(b>>11)&31,t)<<11 |
+                    between((a>>5)&63,(b>>5)&63,t)<<5 |
+                    between(a&31,b&31,t));
+}
+// The quiet shore uses the existing framebuffer and primitives; no bitmap/video assets.
+static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
+    const float unfold=ease(g.arrivalAge/1.2f),sit=ease((g.arrivalAge-1.2f)/1.4f);
+    const int horizon=between(64,45,sit);
+    const bool night=g.spot==2;
+    const auto sky=night?rgb(45,61,64):g.spot==1?rgb(159,121,84):rgb(145,123,92);
+    const auto far=night?rgb(57,75,73):rgb(86,105,92);
+    const auto water=night?rgb(38,63,63):rgb(58,83,76);
+    const auto rust=rgb(129,91,63),wood=rgb(105,91,62),canvas=rgb(93,100,65);
+    c.clear(sky);c.rect(0,horizon,240,135-horizon,water);
+    if(night){
+        c.ellipse(207,horizon-25,6,6,cream);c.ellipse(210,horizon-28,6,6,sky);
+        for(unsigned i=0;i<9;++i)c.pixel(12+mix(i+31)%179,4+mix(i+71)%18,muted);
+    }else c.ellipse(207,horizon-25,9,9,rgb(208,165,102));
+    for(int i=0;i<12;++i){int x=i*22-8,h=5+mix(i+17)%12;c.rect(x,horizon-h,17,h,far);}
+    c.rect(34,horizon-31,4,31,far);c.line(34,horizon-31,43,horizon-33,far);
+    c.rect(0,horizon-2,240,2,rust);
+    // Pump station 03, a single warm window, and the old overhead service pipe.
+    c.rect(134,horizon-27,31,30,far);c.rect(139,horizon-30,21,3,far);
+    c.rect(147,horizon-19,4,5,gold);c.rect(154,horizon-9,6,12,ink);
+    c.line(92,horizon-20,141,horizon-20,far);c.line(92,horizon-19,92,horizon-6,far);
+    c.text(136,horizon-13,"03",muted);
+    if(g.spot==0){
+        c.rect(8,horizon-11,24,12,wood);c.rect(25,horizon-5,20,7,rust);
+        c.ellipse(45,horizon-1,4,5,ink);
+        if((v.knownObjects&(1u<<5))||(g.effectLeft&&g.effect==Anomaly::Drain)){
+            int y=horizon+5+int(ms/180%5);c.line(45,horizon+3,45,y,mint);
+        }
+    }else if(g.spot==1){
+        c.rect(0,horizon+12,61,3,wood);
+        for(int x=8;x<61;x+=17)c.line(x,horizon+15,x-2,horizon+30,rust);
+        c.rect(14,horizon-7,5,5,(v.knownObjects&(1u<<10))?gold:ink);
+        if(v.knownObjects&(1u<<16)){
+            c.line(46,horizon+3,46,horizon+12,ink);c.line(46,horizon+8,53,horizon+8,ink);c.line(53,horizon+8,53,horizon+12,ink);
+        }
+    }else{
+        c.line(23,horizon+3,43,horizon-23,rust);c.line(43,horizon-23,76,horizon-20,rust);
+        c.line(76,horizon-20,76,horizon-2,ink);c.rect(71,horizon-4,10,5,rust);
+        c.ellipse(190,horizon+22,6,2,rust);c.rect(188,horizon+11,3,11,rust);c.pixel(189,horizon+10,gold);
+        if(v.knownObjects&(1u<<23))c.line(189,horizon+17,194,horizon+19,cream);
+    }
+    // Slow discrete ripples; the light itself stays steady, its reflection breathes.
+    for(unsigned i=0;i<24;++i){unsigned h=mix(i+9);int x=(h%240+ms/750)%240,y=horizon+6+(h>>8)%57;
+        c.line(x,y,std::min(x+int(h%7)+2,239),y,i%4?grid:rgb(111,143,125));}
+    for(int i=0;i<4;++i){int x=146+int((ms/1100+i)%3),y=horizon+6+i*7;
+        c.line(x,y,x+2+i%2,y,rgb(142,128,85));}
+    // Bank, resting rod, and a low crate follow the eye down into the seat.
+    int bank=between(120,126,sit);
+    c.rect(0,between(124,133,sit),240,11,ink);
+    c.triangle(0,bank-13,83,135,0,135,ink);c.triangle(240,bank-10,167,135,240,135,ink);
+    c.rect(0,132,240,3,ink);
+    for(int i=0;i<4;++i){c.line(3+i*4,bank,2+i*4,bank-12-i%2*4,ink);}
+    c.line(4,bank+1,between(86,67,sit),bank-8,gold);c.line(4,bank+2,between(86,67,sit),bank-7,rust);
+    c.ellipse(23,bank+1,4,4,rust);c.ellipse(23,bank+1,2,2,ink);
+    const int cx=between(111,202,sit),cy=between(109,118,sit);
+    c.rect(cx-9,cy,30,20,ink);c.rect(cx-8,cy,29,3,wood);c.rect(cx-7,cy+4,27,15,grid);
+    c.line(cx-7,cy+9,cx+18,cy+9,ink);c.line(cx-3,cy+4,cx-3,cy+18,wood);c.line(cx+14,cy+4,cx+14,cy+18,wood);
+    c.rect(cx+9,cy-8,6,6,ink);c.rect(cx+10,cy-7,3,3,water);
+    c.rect(cx-1,cy-10,11,10,cream);c.rect(cx-1,cy-11,11,2,ink);c.line(cx+1,cy-10,cx+7,cy-10,wood);
+    c.rect(cx,cy-3,2,3,rust);c.pixel(cx+8,cy-8,wood);
+    // Backrest slides below the first-person viewpoint; the two arms remain at the edges.
+    int left=between(47,49,sit),right=between(between(52,82,unfold),191,sit);
+    int top=between(79,151,sit),seat=between(111,163,sit);
+    c.line(left-2,top-2,left+5,seat+15,rust);c.line(right+2,top-2,right-5,seat+15,rust);
+    c.triangle(left,top,right,top,left+4,seat-10,canvas);
+    c.triangle(right,top,left+4,seat-10,right-4,seat-10,canvas);
+    c.line(left,top,right,top,ink);c.line(left+4,seat-10,right-4,seat-10,wood);
+    c.line(left+4,seat-7,right-1,seat+13,rust);c.line(right-4,seat-7,left+1,seat+13,rust);
+    int armY=between(103,125,sit),armL=between(left-5,53,sit),armR=between(right+4,188,sit);
+    c.line(armL,armY,armL+12,armY-4,ink);c.line(armR,armY,armR-12,armY-4,ink);
+    c.line(armL,armY+1,armL+12,armY-3,canvas);c.line(armR,armY+1,armR-12,armY-3,canvas);
+    c.line(armL,armY+2,armL+4,armY+15,rust);c.line(armR,armY+2,armR-4,armY+15,rust);
+    if(sit>0){
+        int depth=int(9*sit);
+        c.triangle(armL,armY+1,armL+12,armY-3,armL+depth,armY+depth,canvas);
+        c.triangle(armR,armY+1,armR-12,armY-3,armR-depth,armY+depth,canvas);
+    }
+    if(g.arrivalGreeting&&g.shoreIdle>=2.6f&&g.shoreIdle<7){
+        float opacity=clamp((g.shoreIdle-2.6f)/.6f,0,1)*clamp((7-g.shoreIdle)/1.5f,0,1);
+        c.center(99,"坐会儿吧。",fadeInk(water,cream,opacity));
+    }
+    const bool hint=g.arrivalGreeting?(g.shoreIdle>=7&&g.shoreIdle<12):(g.shoreIdle<4);
+    if(hint){
+        char b[64];std::snprintf(b,sizeof b,"%s / %s",spotName(g.spot),methodProfile(g.method).name);
+        c.text(8,5,b,cream);
+        if(g.effectLeft){std::snprintf(b,sizeof b,"%s：余 %u 竿",eventName(g.effect),g.effectLeft);c.text(8,20,b,gold);}
+        c.rect(61,119,119,15,ink);c.center(121,"空格抛竿 H 帮助",muted);
+    }
+    // Quiet presentation must not conceal persistence failures.
+    if(v.save!=SaveState::Ready){c.rect(0,0,240,18,ink);c.center(3,saveLabel(v.save),cream);}
+}
 void syncDossierPages(Game& g,const ViewState& v){
     bool book=g.stage==Stage::Book||(g.stage==Stage::Dossier&&g.dossierBook);
     const auto& f=book?v.bookCatch:g.caught;
@@ -229,7 +327,8 @@ void syncDossierPages(Game& g,const ViewState& v){
     if(g.dossierPage>=g.dossierPages)g.dossierPage=0;
 }
 void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
-    (void)ms;char b[128];c.clear(ink);
+    char b[128];c.clear(ink);
+    if(g.stage==Stage::Shore){quietShore(c,g,v,ms);return;}
     if(g.stage==Stage::Notes){
         unsigned n=g.notePage%(2+v.reading.count);
         std::snprintf(b,sizeof b,"%u/%u",n+1,2+v.reading.count);tabs(c,"岸边手记",b);

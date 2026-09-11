@@ -174,6 +174,22 @@ static void tests() {
 }
 static void renders() {
     Game g(10);ViewState v;v.save=SaveState::Ready;v.discoveries=12;v.saved=true;v.fresh=true;
+    Game arrival;
+    for(unsigned frame=0;frame<150;++frame){
+        char name[40];std::snprintf(name,sizeof name,"arrival-%03u",frame);
+        snapshot(name,arrival,v,frame*100);
+        tick(arrival,{},6);
+    }
+    for(unsigned spot=0;spot<3;++spot){
+        arrival.spot=spot;char name[40];std::snprintf(name,sizeof name,"rest-%u",spot);snapshot(name,arrival,v,15000);
+    }
+    // Exercise all entrance phases, site variants and persistence warnings under sanitizers.
+    for(unsigned spot=0;spot<3;++spot)for(auto save:{SaveState::Ready,SaveState::Missing,SaveState::Corrupt,SaveState::WriteFailed}){
+        Game opening;opening.spot=spot;ViewState check=v;check.save=save;
+        uint16_t pixels[Width*Height];Canvas canvas(pixels);
+        for(unsigned i=0;i<160;++i){opening.tick(.05f,{});draw(canvas,opening,check,i*50);}
+    }
+    g.arrivalAge=2.6f;g.arrivalGreeting=false;
     snapshot("shore",g,v);
     for(unsigned m=0;m<3;++m){g.method=Method(m);char name[40];std::snprintf(name,sizeof name,"method-%u",m);snapshot(name,g,v);}g.method=Method::Shallow;
     g.spot=1;snapshot("bay",g,v);g.spot=2;snapshot("night",g,v);

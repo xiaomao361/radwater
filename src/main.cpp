@@ -119,6 +119,7 @@ void loop() {
     oldMute=mute;
     bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || in.method || in.notes || in.respond || key('u') || key('t') || key('c') || mute || in.spot>=0;
     if(active) lastInput=now;
+    in.activity=active;
     bool shouldDim=(now-lastInput>60000u)&&(game.stage==Stage::Shore||game.stage==Stage::Book||game.stage==Stage::Dossier||game.stage==Stage::Notes||game.stage==Stage::Caught||game.paused);
     if(shouldDim!=dim){dim=shouldDim;M5Cardputer.Display.setBrightness(dim?20:100);}
     static bool oldUnread=false,oldLink=false,oldResume=false;
