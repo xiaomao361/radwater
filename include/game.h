@@ -8,9 +8,12 @@ constexpr uint32_t LegacyObjectForms = 256;
 constexpr uint32_t ObjectTypes = 24;
 constexpr uint32_t ObjectForms = ObjectTypes * 32;
 constexpr uint32_t ObjectFlag = 1u << 20;
-constexpr uint32_t FormCount = FishForms + ObjectForms;
+constexpr unsigned FishSpecies = 16;
+constexpr uint32_t FormCount = FishSpecies + ObjectForms;
+uint32_t speciesForm(unsigned species);
+const char* speciesName(unsigned species);
 constexpr unsigned RecordBytes = 32;
-constexpr unsigned GeneratorVersion = 2;
+constexpr unsigned GeneratorVersion = 3;
 float clamp(float x, float lo, float hi);
 uint32_t mix(uint32_t x);
 struct Random {
@@ -23,8 +26,9 @@ struct Catch {
     uint32_t form = 0, seed = 0, millimetres = 0, spot = 0;
     uint32_t generator = GeneratorVersion;
     bool object() const { return (form & ObjectFlag) != 0; }
-    uint32_t index() const { return object() ? FishForms + (form & (ObjectFlag - 1)) : form; }
+    uint32_t index() const { return object() ? FishSpecies + (form & (ObjectFlag - 1)) : (form < FishForms ? species() : FormCount); }
     unsigned objectType() const { return (form & 7) | ((form >> 5) & 24); }
+    unsigned species() const { return (form & 7) | ((form >> 12) & 8); }
     unsigned body() const { return form & 7; }
     unsigned tail() const { return (form >> 3) & 3; }
     unsigned fin() const { return (form >> 5) & 3; }
@@ -56,9 +60,10 @@ void encode(const Catch& c, uint32_t sequence, uint8_t out[RecordBytes]);
 bool decode(const uint8_t in[RecordBytes], uint32_t expectedSequence, Catch& c);
 uint32_t crc32(const uint8_t* bytes, size_t n);
 
-enum class Stage { Shore, Waiting, Bite, Fight, Caught, Lost, Book, Help, Dossier };
+enum class Stage { Shore, Waiting, Bite, Fight, Caught, Lost, Book, Help, Dossier, Notes };
 enum class Loss { Early, Late, Broken, Escaped, Released };
-enum class Anomaly { None, DoubleReflection, FalseClock, FutureReport };
+enum class Anomaly { None, DoubleReflection, FalseClock, FutureReport, Drain, Shift, Broadcast, Knock, Receipt, Wind, Lamp, Rain, Bell };
+constexpr unsigned EventCount = 12;
 // Event selection has its own RNG; it never changes catch generation or fight RNG.
 Anomaly chooseAnomaly(uint32_t seed, const Catch& caught, unsigned reflectionOdds = 40);
 struct Input {
@@ -66,7 +71,7 @@ struct Input {
     bool book = false, back = false, help = false, pause = false;
     int spot = -1;
     bool read = false;
-    bool method = false;
+    bool method = false, notes = false, respond = false;
 };
 class Game {
 public:
@@ -85,6 +90,13 @@ public:
     unsigned dossierPages = 3;
     bool dossierBook = false;
     Anomaly anomaly = Anomaly::None;
+    uint32_t knownFish = 0, knownObjects = 0;
+    unsigned quietCasts = 0, recent[3] = {FormCount,FormCount,FormCount};
+    unsigned effectLeft = 0, notePage = 0;
+    Anomaly effect = Anomaly::None;
+    bool eventPending = false, responded = false;
+    uint32_t eventCode = 0;
+    bool catchEvent() const { return anomaly==Anomaly::FalseClock||anomaly==Anomaly::FutureReport||anomaly==Anomaly::Receipt; }
     bool anomalyVisible() const;
     bool surging() const { return surgeLeft > 0; }
     float zone() const { return caught.object() ? 0.22f : 0.18f; }
@@ -95,7 +107,7 @@ public:
 private:
     Random random;
     Input previous;
-    Stage beforeHelp = Stage::Shore;
+    Stage beforeHelp = Stage::Shore, beforeNotes = Stage::Shore;
     unsigned anomalyCooldown = 0;
     void lose(Loss why);
 };

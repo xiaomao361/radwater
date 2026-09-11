@@ -5,10 +5,13 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#ifndef ARDUINO
+#include <cassert>
+#endif
 namespace pond {
-static constexpr uint16_t ink = rgb(3, 10, 3), cream = rgb(189, 255, 137), gold = rgb(143, 241, 83);
-static constexpr uint16_t mint = rgb(108, 196, 64), muted = rgb(107, 165, 77);
-static constexpr uint16_t grid = rgb(28, 66, 22), panel = rgb(8, 24, 7);
+static constexpr uint16_t ink = rgb(27, 32, 29), cream = rgb(233, 221, 188), gold = rgb(224, 172, 87);
+static constexpr uint16_t mint = rgb(138, 174, 153), muted = rgb(164, 171, 153);
+static constexpr uint16_t grid = rgb(64, 78, 69), panel = rgb(37, 47, 41);
 void Canvas::clear(uint16_t c) { std::fill(pixels, pixels + Width * Height, c); }
 void Canvas::pixel(int x, int y, uint16_t c) { if (x >= 0 && x < Width && y >= 0 && y < Height) pixels[y * Width + x] = c; }
 void Canvas::rect(int x, int y, int w, int h, uint16_t c) {
@@ -47,16 +50,21 @@ int Canvas::textWidth(const char* s) const {
     int w = 0; while (*s) { auto cp = utf8(s); w += cp < 128 ? 7 : 12; } return w;
 }
 void Canvas::text(int x, int y, const char* s, uint16_t c) {
+#ifndef ARDUINO
+    if(x<0||x+textWidth(s)>Width||y<0||y+12>Height)std::fprintf(stderr,"text outside screen (%d,%d): %s\n",x,y,s);
+    assert(x>=0&&x+textWidth(s)<=Width&&y>=0&&y+12<=Height);
+#endif
     while (*s) { auto cp = utf8(s); const auto* g = glyph(cp);
         if (g) { for (int yy = 0; yy < 12; ++yy) for (int xx = 0; xx < 12; ++xx) if (g->rows[yy] & (1u << xx)) pixel(x + xx, y + yy, c); }
         else { rect(x + 1, y + 2, 5, 8, c); }
         x += cp < 128 ? 7 : 12;
     }
 }
-void drawCatch(Canvas& c, const Catch& f, int x, int y, int scale) {
+void drawCatch(Canvas& c, const Catch& original, int x, int y, int scale) {
+    Catch f=original;if(!f.object())f.form=speciesForm(f.species());
     // Logical pixels are scaled as blocks: same deterministic drawing on device and host.
     auto p = [&](int a, int b, uint16_t col) { c.rect(x + a * scale, y + b * scale, scale, scale, col); };
-    static const uint16_t colors[] = {rgb(115,212,64),rgb(142,232,81),rgb(163,242,98),rgb(87,165,44),rgb(102,186,56),rgb(128,222,74),rgb(188,255,137),rgb(72,145,38)};
+    static const uint16_t colors[] = {rgb(137,172,153),rgb(192,142,99),rgb(209,179,113),rgb(114,154,168),rgb(175,157,165),rgb(122,155,121),rgb(218,210,176),rgb(113,136,143)};
     uint16_t base = colors[f.object() ? (f.form >> 3) & 7 : f.palette()];
     if (f.object()) {
         unsigned shape = f.objectType(), finish = (f.form >> 6) & 3;
@@ -158,155 +166,133 @@ void drawCatch(Canvas& c, const Catch& f, int x, int y, int scale) {
     if(f.face()==2) c.line(x+(ex-2)*scale,y+ey*scale,x+(ex+2)*scale,y+ey*scale,ink);
     else { c.ellipse(x+ex*scale,y+ey*scale,2*scale,2*scale,ink); p(ex,ey-1,cream); }
     if(f.face()==3) {c.line(x+(rx-1)*scale,y+2*scale,x+(rx+5)*scale,y+6*scale,cream);c.line(x+(rx-1)*scale,y+3*scale,x+(rx+4)*scale,y+9*scale,cream);}
+    if(body==5)c.triangle(x+(rx-4)*scale,y-3*scale,x+(rx+3)*scale,y-3*scale,x+(rx+5)*scale,y-12*scale,base);
     c.line(x+(rx-2)*scale,y+3*scale,x+rx*scale,y+3*scale,ink);
-    if(f.ornament()==1) {c.line(x,y-ry*scale,x+8*scale,y-(ry+8)*scale,gold);c.ellipse(x+9*scale,y-(ry+8)*scale,2*scale,2*scale,cream);}
+    if(body==7||f.ornament()==1) {c.line(x,y-ry*scale,x+8*scale,y-(ry+8)*scale,gold);c.ellipse(x+9*scale,y-(ry+8)*scale,2*scale,2*scale,cream);}
     if(f.ornament()==2) {c.line(x-3*scale,y+ry*scale,x-8*scale,y+(ry+8)*scale,base);c.line(x+3*scale,y+ry*scale,x+8*scale,y+(ry+8)*scale,base);}
     if(f.ornament()==3) {for(int a=-1;a<=1;++a) c.triangle(x+(a*5-3)*scale,y-(ry+3)*scale,x+(a*5+3)*scale,y-(ry+3)*scale,x+a*5*scale,y-(ry+10)*scale,gold);}
 }
 
-static void star(Canvas& c,int x,int y,uint16_t col) {c.line(x-2,y,x+2,y,col);c.line(x,y-2,x,y+2,col);}
 static void outline(Canvas& c,int x,int y,int w,int h,uint16_t col) {
     c.line(x,y,x+w-1,y,col);c.line(x,y+h-1,x+w-1,y+h-1,col);
     c.line(x,y,x,y+h-1,col);c.line(x+w-1,y,x+w-1,y+h-1,col);
 }
-static void brackets(Canvas& c,int x,int y,int w,int h,uint16_t col) {
-    for(int i=0;i<2;++i)for(int j=0;j<2;++j){int xx=x+i*(w-1),yy=y+j*(h-1);c.line(xx,yy,xx+(i?-5:5),yy,col);c.line(xx,yy,xx,yy+(j?-5:5),col);}
+static void tabs(Canvas& c,const char* title,const char* status){
+    c.rect(0,0,240,20,ink);c.text(8,4,title,cream);c.text(232-c.textWidth(status),4,status,gold);c.line(8,19,231,19,muted);
 }
-static void background(Canvas& c) {
-    c.clear(ink);
-    // Static phosphor texture stays behind text: no flicker or moving full-screen band.
-    for(int y=21;y<119;y+=3)c.line(5,y,234,y,rgb(6,17,5));
+static void footer(Canvas& c,const char* s){c.rect(0,119,240,16,ink);c.line(8,119,231,119,grid);c.center(122,s,cream);}
+static const char* saveLabel(SaveState s){switch(s){case SaveState::Ready:return "收藏已保存";case SaveState::Missing:return "无SD：本局不存档";case SaveState::Corrupt:return "存档异常：只读";default:return "写入失败：未保存";}}
+static void page(Canvas& c,const LorePage& p){
+    c.rect(0,20,240,99,cream);c.rect(0,20,3,99,gold);c.text(9,23,p.title,rgb(115,69,37));
+    c.line(9,37,230,37,rgb(181,170,140));
+    for(unsigned i=0;i<6;++i)c.text(9,40+i*13,p.lines[i],ink);
 }
-static void tabs(Canvas& c,int selected,const char* status) {
-    const char* names[]={"FISH","LOG","SYS"};
-    int widths[]={39,32,32},x=8;
-    for(int i=0;i<3;++i){if(i==selected){c.rect(x-3,2,widths[i],14,gold);c.text(x,3,names[i],ink);}else c.text(x,3,names[i],muted);x+=widths[i]+9;}
-    c.text(232-c.textWidth(status),3,status,gold);c.line(5,18,234,18,mint);
+static void scene(Canvas& c,const Game& g,const ViewState& v){
+    unsigned spot=g.spot,ms=unsigned(g.age*1000);
+    uint16_t sky=spot==2?rgb(45,61,64):spot==1?rgb(159,121,84):rgb(122,143,131);
+    uint16_t distant=spot==2?rgb(63,81,78):rgb(94,108,91),rust=rgb(129,91,63),water=spot==2?rgb(38,63,63):rgb(64,91,82);
+    c.rect(0,20,240,56,sky);c.rect(0,76,240,43,water);
+    if(spot==1)c.ellipse(193,42,12,12,rgb(219,175,107));
+    if(spot==2){c.ellipse(198,39,7,7,cream);c.ellipse(201,36,7,7,sky);for(unsigned i=0;i<10;++i)c.pixel(15+mix(i)%175,25+mix(i+31)%31,muted);}
+    // Far factory: stepped silhouettes, broken windows, a leaning chimney.
+    for(int i=0;i<8;++i){unsigned h=mix(i+17);int x=i*34-8,y=52+h%13;c.rect(x,y,25,77-y,distant);}
+    c.rect(146,37,7,33,distant);c.line(146,37,158,34,distant);
+    for(int x=11;x<225;x+=17)c.rect(x,65,3,4,sky);
+    c.rect(0,74,240,3,rust);
+    if(spot==0){
+        c.rect(18,45,50,30,rust);c.rect(23,49,39,22,rgb(155,130,96));c.text(31,52,"03",ink);
+        c.rect(58,64,27,12,rust);c.ellipse(84,70,8,9,ink);c.ellipse(84,70,4,6,water);
+        if((v.knownObjects&(1u<<5))||g.anomaly==Anomaly::Drain){int y=79+ms/100%13;c.line(82,78,82,y,mint);c.line(87,78,87,y+2,mint);}
+        for(int i=0;i<6;++i){int x=3+i*6;c.line(x,107,x+3,80-i%3*6,ink);c.line(x+2,94,x+7,85,ink);}
+    }else if(spot==1){
+        c.rect(8,55,34,22,rust);c.rect(14,59,8,9,(v.knownObjects&(1u<<10))||g.anomaly==Anomaly::Lamp?gold:ink);
+        c.rect(29,61,7,16,ink);c.rect(0,82,81,5,rgb(141,117,82));
+        for(int x=9;x<79;x+=19){c.line(x,87,x-2,113,rust);c.line(x,83,x+9,83,ink);}
+        if(v.knownObjects&(1u<<16)){c.line(52,65,52,81,ink);c.line(52,74,65,74,ink);c.line(64,74,64,81,ink);}
+    }else{
+        c.line(30,79,49,48,rust);c.line(49,48,95,52,rust);c.line(95,52,95,75,ink);c.rect(86,71,17,8,rust);
+        c.ellipse(175,86,10,3,rust);c.rect(172,68,6,18,rust);c.rect(170,67,10,3,gold);
+        if(v.knownObjects&(1u<<23))c.line(174,78,182,81,cream);
+    }
+    for(unsigned i=0;i<22;++i){unsigned h=mix(i+9);int x=(h%240+ms/280)%240,y=80+(h>>8)%34;c.line(x,y,std::min(x+int(h%9)+3,239),y,i%3?grid:mint);}
+    if(g.anomaly==Anomaly::Rain)for(int i=0;i<14;++i){unsigned h=mix(i+89);int x=h%233,y=80+(h>>8)%33;c.line(x,y,x+2+ms/250%3,y,mint);}
+    if(g.anomaly==Anomaly::Wind){int x=100+ms/70%120;c.rect(x,54+ms/200%9,6,4,cream);}
+    if(g.anomaly==Anomaly::Shift)for(int i=0;i<5;++i){int x=(80+i*23+ms/70)%235;c.line(x,89,x+6,87,mint);}
+    // Foreground shore and rod frame the water, leaving the centre open.
+    c.triangle(0,106,75,119,0,119,ink);c.line(15,116,108,60,gold);c.line(15,117,109,61,rust);
+    c.ellipse(20,111,5,5,rust);c.ellipse(20,111,2,2,ink);
 }
-static void footer(Canvas& c,const char* s) {c.rect(0,119,240,16,ink);c.line(5,119,234,119,mint);c.center(122,s,cream);}
-static const char* saveLabel(SaveState s) {
-    switch(s) {case SaveState::Ready:return "存档就绪";case SaveState::Missing:return "无SD：本局不存档";case SaveState::Corrupt:return "存档异常：只读";default:return "写入失败：未保存";}
-}
-static void bar(Canvas& c,int x,int y,int w,float v,uint16_t col) {
-    outline(c,x,y,w,8,muted);int filled=int((w-4)*clamp(v,0,1));
-    for(int n=0;n<filled;n+=5)c.rect(x+2+n,y+2,std::min(3,filled-n),4,col);
-}
-static void scene(Canvas& c,unsigned spot,uint32_t ms) {
-    // First-person fishing rig and a line-drawn industrial shoreline, no avatar.
-    brackets(c,7,40,226,63,grid);
-    c.line(10,73,230,73,mint);
-    const int shift=int(spot)*8;
-    c.line(19,69,19,52,muted);c.line(19,52,43,52,muted);c.line(43,52,43,69,muted);
-    c.line(25,52,29,43,muted);c.line(29,43,37,43,muted);c.line(37,43,41,52,muted);
-    c.rect(26,57,3,5,mint);c.rect(34,57,3,5,mint);
-    c.line(57+shift,69,57+shift,39,muted);c.line(69+shift,69,69+shift,39,muted);
-    outline(c,53+shift,38,21,12,mint);c.line(57+shift,53,69+shift,66,muted);c.line(69+shift,53,57+shift,66,muted);
-    c.line(110,73,131,65,muted);c.line(131,65,158,70,muted);c.line(158,70,172,64,muted);c.line(172,64,199,70,muted);
-    c.line(210,70,211,48,muted);c.line(211,57,221,52,muted);c.line(211,61,202,53,muted);
-    if(spot==2){for(int i=0;i<8;++i){unsigned h=mix(i+34);c.pixel(100+h%104,43+(h>>9)%16,mint);}star(c,181,48,gold);}
-    for(int i=0;i<13;++i){unsigned h=mix(i+11);int x=15+(h%210+ms/240)%210,y=78+(h>>8)%23;c.line(x,y,std::min(x+3+int((h>>16)%8),229),y,grid);}
-    c.line(11,108,130,48,gold);c.line(12,110,131,49,mint);
-    for(int i=0;i<4;++i){int x=30+i*23,y=98-i*12;c.line(x,y-2,x+2,y+2,cream);}
-    outline(c,18,101,12,11,mint);c.line(24,101,24,112,mint);c.line(16,104,18,104,gold);
-}
-static void scanFrame(Canvas& c,int x,int y,int w,int h) {
-    c.rect(x,y,w,h,panel);
-    for(int i=x+12;i<x+w;i+=12)c.line(i,y+2,i,y+h-3,grid);
-    for(int j=y+9;j<y+h;j+=10)c.line(x+2,j,x+w-3,j,grid);
-    brackets(c,x,y,w,h,mint);
-}
-void syncDossierPages(Game& g,const ViewState& v) {
+void syncDossierPages(Game& g,const ViewState& v){
     bool book=g.stage==Stage::Book||(g.stage==Stage::Dossier&&g.dossierBook);
-    g.dossierPages=(!book||v.bookValid)&&annotationFor(book?v.bookCatch:g.caught,v.knownObjects)?4:3;
+    const auto& f=book?v.bookCatch:g.caught;
+    g.dossierPages=f.object()?(annotationFor(f,v.knownObjects)?4:3):(fishAnnotation(f,v.knownObjects)?2:1);
     if(g.dossierPage>=g.dossierPages)g.dossierPage=0;
 }
-void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms) {
-    char b[100];background(c);
-    if(g.stage==Stage::Dossier) {
-        std::snprintf(b,sizeof b,"%u / %u",g.dossierPage+1,g.dossierPages);tabs(c,1,b);
-        if(g.dossierBook&&!v.bookValid) {
-            c.center(57,"没有可读的标本档案",cream);footer(c,"R 返回图鉴");return;
-        }
-        const auto page=dossier(g.dossierBook?v.bookCatch:g.caught,g.dossierPage,v.knownObjects);
-        c.text(8,23,page.title,gold);
-        for(int i=0;i<6;++i)c.text(8,39+i*13,page.lines[i],i==0?muted:cream);
-        footer(c,"空格翻页  R 返回");return;
+void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
+    (void)ms;char b[128];c.clear(ink);
+    if(g.stage==Stage::Notes){
+        unsigned n=g.notePage%(2+v.reading.count);
+        std::snprintf(b,sizeof b,"%u/%u",n+1,2+v.reading.count);tabs(c,"岸边手记",b);
+        if(n==0){
+            page(c,{"调查摘记",{"只记录已经见过的材料。",v.knownObjects&(1u<<10)?"工牌：正反面属于同一个人。":"工牌：尚未发现。",v.knownObjects&(1u<<16)?"合照：十二个名字，十三个人。":"合照：尚未发现。",v.knownObjects&(1u<<11)?"怀表：沈在额外一格里签过退。":"怀表：尚未发现。",v.knownObjects&(1u<<23)?"铅封：夹痕位于封口内侧。":"铅封：尚未发现。",v.notebookSave==SaveState::Ready?"手记存档就绪，可随时放下。":v.notebookSave==SaveState::Missing?"无SD：手记仅保留本次开机。":"手记保存异常，本次修改未存。"}});
+        }else if(n==1)page(c,siteDossier(g.spot));else page(c,eventDossier(v.reading.events[n-2]));
+        footer(c,"空格下一页 A 上一页 N 返回");return;
     }
-    if(g.stage==Stage::Help) {
-        tabs(c,2,"指南");c.text(9,23,"ANGLER / 操作手册",gold);
-        c.text(9,41,"空格抛竿，等浮漂真正下沉",cream);
-        c.text(9,57,"咬钩再按空格，自动跟鱼",cream);
-        c.text(9,73,"按住空格收线，张力高松手",cream);
-        c.text(9,90,"B 图鉴 R 档案 P 暂停",mint);
-        c.text(9,105,"F 钓法 1/2/3 水域 M 音",muted);
+    if(g.stage==Stage::Dossier){
+        std::snprintf(b,sizeof b,"%u/%u",g.dossierPage+1,g.dossierPages);tabs(c,"水边档案",b);
+        if(g.dossierBook&&!v.bookValid){c.center(57,"没有可读的档案",cream);footer(c,"R 返回");return;}
+        page(c,dossier(g.dossierBook?v.bookCatch:g.caught,g.dossierPage,v.knownObjects));
+        footer(c,v.linkAvailable?"空格翻页 T 关联 R 返回":"空格翻页 R 返回");return;
+    }
+    if(g.stage==Stage::Help){
+        tabs(c,"口袋钓鱼","操作指南");
+        page(c,{"在这里歇一会儿",{"空格抛竿，咬钩后再按一次。","按住收线，挣扎时松一下。","B 图鉴 R 档案 U 找未读","N 手记 T 关联 C 续读","F 钓法 1/2/3 水域 M 音","P 暂停；来不及咬钩会等你。"}});
         footer(c,"空格 / H 返回");return;
     }
-    if(g.stage==Stage::Book || g.stage==Stage::Caught) {
-        const bool book=g.stage==Stage::Book;const Catch& f=book?v.bookCatch:g.caught;
-        tabs(c,1,book?"图鉴":!v.saved?"未存档":v.fresh?"新发现":"已记录");
-        if(book)std::snprintf(b,sizeof b,"%lu / %lu",static_cast<unsigned long>(v.bookIndex+1),static_cast<unsigned long>(v.discoveries));
-        else if(g.anomalyVisible()&&g.anomaly==Anomaly::FalseClock)std::snprintf(b,sizeof b,"仪表 25:13");
-        else std::snprintf(b,sizeof b,"本局 %u",g.landed);
-        c.text(8,23,book?"标本档案":v.newAnnotations?"新增批注 R 档案":"捕获报告 R 档案",gold);
-        if(!book||v.bookValid)c.text(232-c.textWidth(b),23,b,muted);
-        if(book&&!v.bookValid){brackets(c,20,43,200,55,grid);c.center(51,v.discoveries?"图鉴读取失败":"尚无标本记录",cream);c.center(75,"成功保存后加入图鉴",muted);footer(c,"B 返回水域");return;}
-        scanFrame(c,8,41,102,61);drawCatch(c,f,63,70,1);
-        if(f.rarity()==2){star(c,17,50,gold);star(c,101,94,gold);}
-        catchName(f,b,sizeof b);c.text(117,40,b,cream);
-        if(f.object()){
-            c.text(117,56,colorName((f.form>>3)&7),mint);c.text(117,72,"拾得物",muted);
-            static const char* condition[]={"普通表面","苔藓覆盖","刻纹残片","星尘附着"};c.text(117,88,condition[(f.form>>6)&3],mint);
-        }else{
-            c.text(117,56,patternName(f.pattern()),mint);
-            std::snprintf(b,sizeof b,"%lu.%lu cm",static_cast<unsigned long>(f.millimetres/10),static_cast<unsigned long>(f.millimetres%10));c.text(117,72,b,cream);
-            std::snprintf(b,sizeof b,"习性 %s",behaviorName(f.behavior()));c.text(117,88,b,muted);
+    if(g.stage==Stage::Book||g.stage==Stage::Caught){
+        bool book=g.stage==Stage::Book;const auto& f=book?v.bookCatch:g.caught;
+        std::snprintf(b,sizeof b,"%lu/%lu %s",(unsigned long)v.bookIndex+1,(unsigned long)v.discoveries,v.unread?"未读":"已读");
+        tabs(c,book?"收藏柜":"今日打捞",book?b:!v.saved?"未保存":v.fresh?"新发现":"又见面了");
+        if(book&&!v.bookValid){c.center(49,v.discoveries?"图鉴读取失败":"收藏柜还是空的",cream);c.center(72,"钓获并保存后再来看看",muted);footer(c,"B 返回水域");return;}
+        if(book){
+            catchName(f,b,sizeof b);c.text(8,24,b,cream);drawCatch(c,f,125,83,2);
+            std::snprintf(b,sizeof b,"%lu.%lu cm",(unsigned long)f.millimetres/10,(unsigned long)f.millimetres%10);c.text(232-c.textWidth(b),24,b,muted);
+            footer(c,"A/D 选择 R 阅读 U 未读 B 返回");return;
         }
-        if(!book&&g.anomalyVisible()&&g.anomaly==Anomaly::FutureReport)c.text(8,105,"本次打捞已于明日完成",gold);
-        else {
-            std::snprintf(b,sizeof b,"ID %06lX",static_cast<unsigned long>(f.form));c.text(8,105,b,muted);
-            static const char* type[]={"常见特征","特殊特征","稀有特征"};c.text(117,105,type[f.rarity()],gold);
-        }
-        footer(c,book?(annotationFor(f,v.knownObjects)?"A/D 选标本 R 有批注 B 返回":"A/D 选标本 R 档案 B 返回"):v.saved?"已保存 空格再钓 R 档案 B 图鉴":saveLabel(v.save));return;
+        drawCatch(c,f,56,51,1);catchName(f,b,sizeof b);c.text(110,28,b,cream);
+        std::snprintf(b,sizeof b,"%lu.%lu cm",(unsigned long)f.millimetres/10,(unsigned long)f.millimetres%10);c.text(110,44,b,muted);
+        if(g.anomaly!=Anomaly::None)std::snprintf(b,sizeof b,"N %s",eventName(g.anomaly));
+        else std::snprintf(b,sizeof b,"%s",v.newAnnotations?"有新关联批注":"R 阅读完整档案");
+        c.text(110,59,b,gold);
+        auto card=dossier(f,0,v.knownObjects);unsigned start=f.object()?1:0;
+        if(!v.fresh&&!f.object()&&fishAnnotation(f,v.knownObjects)){card=*fishAnnotation(f,v.knownObjects);start=0;}
+        if(g.anomaly!=Anomaly::None){card=eventDossier(g.eventCode);start=0;}
+        c.rect(0,75,240,43,panel);for(unsigned i=0;i<3;++i)c.text(8,77+i*13,card.lines[start+i],cream);
+        footer(c,!v.saved?saveLabel(v.save):(v.notebookSave==SaveState::WriteFailed||v.notebookSave==SaveState::Corrupt)?"收藏已存 手记未存 N 查看":g.anomaly==Anomaly::Knock&&!g.responded?"空格再钓 E 轻敲 N 记录":"空格再钓 R 档案 N 手记");return;
     }
-    tabs(c,0,g.paused?"暂停":g.stage==Stage::Fight?"追踪":g.stage==Stage::Bite?"咬钩":g.stage==Stage::Waiting?"侦测":"待命");
-    std::snprintf(b,sizeof b,"0%u %s / %s",g.spot+1,spotName(g.spot),methodProfile(g.method).name);c.text(8,23,b,gold);
-    std::snprintf(b,sizeof b,"发现 %lu",static_cast<unsigned long>(v.discoveries));c.text(232-c.textWidth(b),23,b,muted);
+    std::snprintf(b,sizeof b,"%s / %s",spotName(g.spot),methodProfile(g.method).name);tabs(c,b,g.paused?"暂停":g.stage==Stage::Fight?"收线":g.stage==Stage::Bite?"咬钩":"水边");
+    scene(c,g,v);
     if(g.stage==Stage::Fight){
-        const int left=15,width=210,center=left+int(g.rod*width),fx=left+int(g.fish*width),half=int(g.zone()*width);
-        c.text(9,40,g.surging()?"! 冲刺：松线":g.tension>0.75f?"! 张力过高：松手":"自动跟鱼：按住空格收线",cream);
-        c.rect(left,57,width,20,panel);outline(c,left,57,width,20,muted);
-        for(int i=0;i<=20;++i){int x=left+i*(width-1)/20;c.line(x,58,x,i%5==0?63:60,grid);}
-        const int a=std::max(left+1,center-half),z=std::min(left+width-1,center+half);
-        c.rect(a,63,z-a,12,rgb(30,85,17));c.line(a,63,a,75,gold);c.line(z,63,z,75,gold);
-        c.line(center,59,center,76,mint);c.ellipse(fx,68,4,3,cream);c.triangle(fx-3,68,fx-7,64,fx-7,72,cream);
-        c.text(9,82,"收线",cream);bar(c,40,86,158,g.progress,gold);std::snprintf(b,sizeof b,"%02u",unsigned(g.progress*100));c.text(209,82,b,gold);
-        c.text(9,101,"张力",cream);bar(c,40,105,158,g.tension,g.tension>0.7f?cream:mint);
-        c.text(209,101,g.tension>0.7f?"!!":"OK",g.tension>0.7f?cream:muted);
-        footer(c,"空格收线 / 松手放线  P 暂停");
+        int x=185-int(g.progress*100),y=86+int(g.progress*16);
+        c.ellipse(x,y,7,2,mint);c.triangle(x-6,y,x-10,y-3,x-10,y+3,mint);c.line(109,61,x,y-2,gold);
+        c.rect(8,24,224,17,ink);c.center(26,g.surging()?"鱼在挣扎，松一下空格":"按住空格，慢慢靠岸",cream);
+        if(g.surging()){c.line(x-12,y+4,x+12,y+4,cream);c.line(x-8,y-5,x+8,y-5,cream);}
+        c.rect(150,109,80,5,ink);c.rect(151,110,int(78*g.tension),3,g.tension>.7f?gold:mint);
+        footer(c,"按住收线 / 松手放线 P 暂停");
+    }else if(g.stage==Stage::Waiting||g.stage==Stage::Bite){
+        int y=g.stage==Stage::Bite?100:88+int(std::sin(g.age*4)*2);c.line(109,61,161,y-5,cream);c.rect(160,y-5,3,8,gold);c.line(150,y+4,173,y+4,mint);
+        if(g.anomaly==Anomaly::DoubleReflection){c.line(156,y+7,156,y+11,muted);c.line(168,y+7,168,y+11,muted);}
+        if(g.stage==Stage::Bite){c.rect(58,27,171,20,gold);c.text(66,31,"咬钩了！按一下空格",ink);}
+        else if(g.anomalyVisible()){c.rect(8,25,148,17,ink);c.text(13,27,eventName(g.anomaly),gold);}
+        footer(c,g.stage==Stage::Bite?"空格提竿 P 暂停":"等一小会儿 P 暂停");
+    }else if(g.stage==Stage::Lost){
+        c.rect(15,34,210,44,ink);c.center(40,g.loss==Loss::Broken?"这次没留住它":"收好鱼竿，歇一会儿",cream);c.center(59,"再钓一竿也来得及",muted);footer(c,"空格再钓 B 图鉴 N 手记");
     }else{
-        scene(c,g.spot,ms);
-        if(g.stage==Stage::Waiting||g.stage==Stage::Bite){
-            int by=g.stage==Stage::Bite?91:g.nibble()?85:80+int(std::sin(ms/230.0f)*2);
-            c.line(131,49,165,by-5,muted);c.line(156,by+6,178,by+6,mint);
-            c.rect(164,by-5,3,10,cream);c.rect(164,by-1,3,2,ink);
-            // Reflections stay below the float and vanish before the bite signal.
-            if(g.anomalyVisible()&&g.anomaly==Anomaly::DoubleReflection){
-                for(int dx:{-5,5}){c.line(165+dx,by+9,165+dx,by+13,mint);c.line(164+dx,by+16,166+dx,by+16,muted);}
-            }
-            if(g.stage==Stage::Bite){c.rect(80,45,148,22,gold);c.text(89,50,"咬钩！现在按空格",ink);}
-            else{c.rect(108,43,99,15,ink);c.text(111,44,g.nibble()?"试探中...":"等待信号...",mint);}
-            footer(c,g.stage==Stage::Bite?"[ 空格提竿 ]":g.nibble()?"只是试探，继续等待":"等浮漂下沉  P 暂停");
-        }else if(g.stage==Stage::Lost){
-            static const char* why[]={"提早了，鱼还在试探","晚了一步，鱼游走了","线断了，下次松一松","鱼挣脱了，下次再来","已放弃本次垂钓"};
-            c.rect(47,47,181,48,ink);outline(c,47,47,181,48,mint);
-            c.text(57,52,"信号中断",cream);c.text(57,73,why[int(g.loss)],mint);
-            footer(c,"空格再钓  B 图鉴");
-        }else{
-            c.rect(110,43,122,17,ink);c.text(113,45,methodProfile(g.method).hint,mint);
-            c.rect(54,104,179,13,ink);c.text(232-c.textWidth(saveLabel(v.save)),105,saveLabel(v.save),v.save==SaveState::Ready?muted:cream);
-            footer(c,"空格抛竿 F 钓法 B 图鉴 H 帮助");
-        }
+        if(g.effectLeft){std::snprintf(b,sizeof b,"%s：余 %u 竿",eventName(g.effect),g.effectLeft);c.rect(8,25,205,16,ink);c.text(12,27,b,gold);}
+        else if(v.save!=SaveState::Ready){c.rect(8,25,220,16,ink);c.text(12,27,saveLabel(v.save),cream);}
+        c.rect(86,103,147,14,ink);c.text(90,104,"B 收藏 N 手记 C 续读",cream);
+        footer(c,"空格抛竿 F 钓法 H 帮助");
     }
-    if(g.paused){c.rect(44,43,152,58,ink);outline(c,44,43,152,58,gold);c.center(49,"垂钓已暂停",cream);c.center(68,"当前进度保留",mint);c.center(84,"P 继续",gold);}
+    if(g.paused){c.rect(27,43,186,59,ink);outline(c,27,43,186,59,gold);c.center(48,"歇一会儿",cream);c.center(66,"鱼和进度都在这里等你",muted);c.center(85,"P 继续",gold);}
 }
 }

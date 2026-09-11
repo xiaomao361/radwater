@@ -35,8 +35,12 @@ with tempfile.TemporaryDirectory() as td:
     assert [r['generator_version'] for r in exported['records'][-3:]]==[1,2,2]
     assert [r['appearance_id'] for r in exported['records'][-3:]]==[1048576,1048832,1049088]
     assert mixed.read_bytes()==mixed_bytes
+    modern=root/'build/mixed-v1-v2-v3.pfj'
+    result=subprocess.run([sys.executable,str(root/'tools/journal.py'),str(modern),'--export',str(p/'modern.json')],capture_output=True,check=True)
+    current=json.loads((p/'modern.json').read_text());assert current['catches']==36 and current['records'][-1]['generator_version']==3
+    assert modern.read_bytes()[:len(mixed_bytes)]==mixed_bytes
     # Valid CRC cannot turn unknown versions or out-of-range new IDs into healthy data.
-    for form,version in [(1048832,1),(1049344,2),(1048576,3)]:
+    for form,version in [(1048832,1),(1049344,2),(1048576,4),(1,3)]:
         invalid=struct.pack('<7I',0x314a4650,2,form,42,123,0,version)
         raw=valid+invalid+struct.pack('<I',zlib.crc32(invalid))
         source.write_bytes(raw)
@@ -45,4 +49,4 @@ with tempfile.TemporaryDirectory() as td:
         assert result.returncode==2 and report['status']=='partial' and report['valid_prefix_bytes']==32
         assert source.read_bytes()==raw
 print('journal CLI: valid/partial, export, recovery to new file, overwrite refusal PASS')
-print('journal CLI: C++ mixed v1/v2 fixture and invalid version/ID boundaries PASS')
+print('journal CLI: C++ mixed v1/v2/v3 fixtures and invalid version/ID boundaries PASS')

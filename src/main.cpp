@@ -10,11 +10,15 @@
 using namespace pond;
 namespace {
 constexpr const char* Directory = "/PocketFishing";
-constexpr const char* SaveFile = "/PocketFishing/catches-v1.pfj";
+
 class SDStorage : public Storage {
     bool mounted = false;
     File reader;
+    const char* path;
 public:
+    explicit SDStorage(const char* p):path(p){}
+    void attach(bool available){mounted=available;}
+    bool available()const{return mounted;}
     void begin() {
         // ADV and original Cardputer share SD SPI pins; keyboard is handled by M5Cardputer.
         SPI.begin(40, 39, 14, 12);
@@ -25,26 +29,27 @@ public:
     bool size(uint32_t& bytes) override {
         if (!mounted) return false;
         if (reader) reader.close();
-        if (!SD.exists(SaveFile)) { bytes = 0; return true; }
-        reader = SD.open(SaveFile, FILE_READ);
+        if (!SD.exists(path)) { bytes = 0; return true; }
+        reader = SD.open(path, FILE_READ);
         if (!reader || reader.isDirectory() || reader.size() > UINT32_MAX) return false;
         bytes = uint32_t(reader.size()); return true;
     }
     bool read(uint32_t offset, uint8_t* out, size_t count) override {
         if (!mounted) return false;
-        if (!reader) reader = SD.open(SaveFile, FILE_READ);
+        if (!reader) reader = SD.open(path, FILE_READ);
         return reader && reader.seek(offset) && reader.read(out, count) == int(count);
     }
     bool append(const uint8_t* bytes, size_t count) override {
         if (!mounted) return false;
         if (reader) reader.close();
-        auto file = SD.open(SaveFile, FILE_APPEND);
+        auto file = SD.open(path, FILE_APPEND);
         if (!file) return false;
         size_t n = file.write(bytes, count); file.flush(); file.close();
         // Journal performs a reopen + length + byte-for-byte readback before reporting saved.
         return n == count;
     }
-} storage;
+} storage("/PocketFishing/catches-v1.pfj"), noteStorage("/PocketFishing/reading-v1.pfn");
+Notebook notebook;
 Game game;
 Journal journal;
 ViewState view;
@@ -54,14 +59,33 @@ uint32_t lastTick = 0, lastFrame = 0, lastInput = 0;
 bool oldLeft = false, oldRight = false, oldMute = false;
 bool dim = false;
 Stage oldStage = Stage::Shore;
+bool unread(const Catch& c){return view.reading.unread(c,view.knownObjects);}
+unsigned relatedType(const Catch& c){return c.object()?evidenceNext(c.objectType()):fishEvidence(c.species());}
 void loadBook() {
-    view.bookValid = journal.discoveries && journal.discovery(view.bookIndex, view.bookCatch);
-    view.save = journal.state;
+    view.bookValid=journal.discoveries&&journal.discovery(view.bookIndex,view.bookCatch);
+    view.save=journal.state;view.unread=view.bookValid&&unread(view.bookCatch);
 }
-void refreshView() {
-    view.save = journal.state; view.discoveries = journal.discoveries; view.savedCatches = journal.records;
-    view.knownObjects = journal.knownObjectTypes();
+void persistReading(){notebook.save(view.reading);view.notebookSave=notebook.state;}
+void refreshView(){
+    view.save=journal.state;view.discoveries=journal.discoveries;view.savedCatches=journal.records;
+    view.knownObjects=journal.knownObjectTypes();view.knownFish=journal.knownFishSpecies();
+    game.knownObjects=view.knownObjects;game.knownFish=view.knownFish;
 }
+void selectUnread(){
+    // Newly available annotations first, then unseen main entries. Bounded by the small catalogue.
+    for(unsigned pass=0;pass<2;++pass)for(unsigned n=0;n<journal.discoveries;++n){
+        Catch c;if(!journal.discovery(n,c)){refreshView();return;}
+        bool note=view.reading.noteUnread(c,view.knownObjects);
+        if((pass==0?note:unread(c))){view.bookIndex=n;loadBook();return;}
+    }
+    loadBook();
+}
+void markRead(){
+    const auto& c=game.dossierBook?view.bookCatch:game.caught;
+    if(game.dossierBook&&!view.bookValid)return;
+    view.reading.read(c,game.dossierPage,view.knownObjects,journal.known(c));persistReading();
+}
+
 }
 void setup() {
     auto cfg = M5.config();
@@ -73,8 +97,8 @@ void setup() {
     M5Cardputer.Display.fillScreen(TFT_BLACK);
     M5Cardputer.Display.setTextColor(TFT_WHITE);
     M5Cardputer.Display.println("Pocket Fishing / loading journal...");
-    storage.begin(); journal.load(storage); refreshView();
-    game = Game(esp_random());
+    storage.begin();noteStorage.attach(storage.available());journal.load(storage);notebook.load(noteStorage);
+    view.reading=notebook.data;view.notebookSave=notebook.state;game=Game(esp_random());refreshView();
     lastTick = lastFrame = lastInput = millis();
 }
 void loop() {
@@ -86,17 +110,32 @@ void loop() {
     in.action = keys.space || keys.enter;
     in.left = key('a') || key(','); in.right = key('d') || key('/');
     in.book = key('b'); in.back = keys.del || key('`');
-    in.help = key('h'); in.pause = key('p'); in.read = key('r'); in.method = key('f');
+    in.help = key('h'); in.pause = key('p'); in.read = key('r'); in.method = key('f'); in.notes=key('n');in.respond=key('e');
     // An empty or unreadable catalogue has no specimen dossier to open.
     if(game.stage==Stage::Book&&!view.bookValid)in.read=false;
     if(key('1'))in.spot=0;else if(key('2'))in.spot=1;else if(key('3'))in.spot=2;
     bool mute = key('m');
     if(mute&&!oldMute) { view.sound=!view.sound; if(view.sound) M5Cardputer.Speaker.tone(660,60); }
     oldMute=mute;
-    bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || in.method || mute || in.spot>=0;
+    bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || in.method || in.notes || in.respond || key('u') || key('t') || key('c') || mute || in.spot>=0;
     if(active) lastInput=now;
-    bool shouldDim=(now-lastInput>60000u)&&(game.stage==Stage::Shore||game.stage==Stage::Book||game.stage==Stage::Dossier||game.paused);
+    bool shouldDim=(now-lastInput>60000u)&&(game.stage==Stage::Shore||game.stage==Stage::Book||game.stage==Stage::Dossier||game.stage==Stage::Notes||game.stage==Stage::Caught||game.paused);
     if(shouldDim!=dim){dim=shouldDim;M5Cardputer.Display.setBrightness(dim?20:100);}
+    static bool oldUnread=false,oldLink=false,oldResume=false;
+    bool u=key('u'),link=key('t'),resume=key('c');
+    bool jumped=false;
+    if(u&&!oldUnread&&game.stage==Stage::Book)selectUnread();
+    if(resume&&!oldResume&&(game.stage==Stage::Shore||game.stage==Stage::Book)&&view.reading.bookmark<FormCount){
+        if(journal.find(view.reading.bookmark,view.bookIndex,view.bookCatch)){
+            view.bookValid=true;game.stage=Stage::Dossier;game.dossierBook=true;game.dossierPage=view.reading.page;jumped=true;
+        }else refreshView();
+    }
+    if(link&&!oldLink&&(game.stage==Stage::Dossier||game.stage==Stage::Book||game.stage==Stage::Caught)){
+        Catch from=game.stage==Stage::Book||(game.stage==Stage::Dossier&&game.dossierBook)?view.bookCatch:game.caught;
+        for(unsigned n=0;n<journal.discoveries;++n){Catch c;if(!journal.discovery(n,c)){refreshView();break;}
+            if(c.object()&&c.objectType()==relatedType(from)){view.bookIndex=n;view.bookCatch=c;view.bookValid=true;game.stage=Stage::Dossier;game.dossierBook=true;game.dossierPage=0;jumped=true;break;}}
+    }
+    oldUnread=u;oldLink=link;oldResume=resume;
     if(game.stage==Stage::Book) {
         bool moved=false;
         if(in.left&&!oldLeft&&view.bookIndex>0){--view.bookIndex;moved=true;}
@@ -105,7 +144,14 @@ void loop() {
     }
     oldLeft=in.left;oldRight=in.right;
     syncDossierPages(game,view);
+    const Stage beforeTick=game.stage;const unsigned beforePage=game.dossierPage;
     game.tick((now-lastTick)/1000.0f,in);lastTick=now;
+    if(game.stage==Stage::Dossier&&beforeTick!=Stage::Dossier&&!jumped){
+        const auto& c=game.dossierBook?view.bookCatch:game.caught;
+        game.dossierPage=view.reading.entryPage(c,view.knownObjects);
+    }
+    if(game.stage==Stage::Dossier&&(jumped||beforeTick!=Stage::Dossier||beforePage!=game.dossierPage))markRead();
+    if(game.eventPending){view.reading.addEvent(game.eventCode);persistReading();game.eventPending=false;}
     if(game.newCatch) {
         const uint32_t before=unlockedAnnotations(journal.knownObjectTypes());
         view.fresh=!journal.known(game.caught);
@@ -114,13 +160,15 @@ void loop() {
         view.newAnnotations=unlockedAnnotations(view.knownObjects)&~before;
     }
     if(game.stage!=oldStage) {
-        if(game.stage==Stage::Book&&oldStage!=Stage::Dossier){view.bookIndex=journal.discoveries?journal.discoveries-1:0;loadBook();}
+        if(game.stage==Stage::Book&&oldStage!=Stage::Dossier){view.bookIndex=journal.discoveries?journal.discoveries-1:0;selectUnread();}
         if(view.sound) {
             if(game.stage==Stage::Bite)M5Cardputer.Speaker.tone(880,90);
             if(game.stage==Stage::Caught&&oldStage!=Stage::Dossier)M5Cardputer.Speaker.tone(1175,100);
         }
         oldStage=game.stage;
     }
+    const Catch& shown=game.stage==Stage::Book||(game.stage==Stage::Dossier&&game.dossierBook)?view.bookCatch:game.caught;
+    view.linkAvailable=bool(view.knownObjects&(1u<<relatedType(shown)));view.unread=unread(shown);
     if(now-lastFrame>=33u) {
         draw(canvas,game,view,now);
         M5Cardputer.Display.pushImage(0,0,Width,Height,framebuffer);

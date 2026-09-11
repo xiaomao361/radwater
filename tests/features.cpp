@@ -1,10 +1,12 @@
 #include "game.h"
 #include "view.h"
 #include "lore.h"
+#include "notebook.h"
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <set>
 using namespace pond;
 
 static void eventTests() {
@@ -16,7 +18,9 @@ static void eventTests() {
             last=i;++count;types|=1u<<unsigned(sampler.anomaly);
         }
     }
-    assert(count>200&&count<1200&&types==14);
+    assert(count>1500&&count<4500);
+    for(unsigned type:{9u,11u})for(unsigned seed=0;seed<1000;++seed){Catch c;c.form=ObjectFlag|(type&7)|((type&24)<<5);auto e=chooseAnomaly(seed,c,1);if(e!=Anomaly::None)types|=1u<<unsigned(e);}
+    assert(types==8190);
     Game a(18),b(18);a.cast();b.cast();
     for(unsigned i=0;i<3000;++i){
         a.anomaly=Anomaly::FalseClock;b.anomaly=Anomaly::None;
@@ -38,8 +42,8 @@ static void eventTests() {
             assert(!std::memcmp(normal+119*Width,odd+119*Width,16*Width*sizeof(uint16_t)));
         }
     }
-    a.age=3;assert(!a.anomalyVisible());
-    std::cout<<"events: "<<count<<"/20000 casts, all 3 kinds; 3-cast cooldown; timers/pause; unchanged fight, record and save-status pixels\n";
+    a.age=30;assert(a.anomalyVisible());
+    std::cout<<"events: "<<count<<"/20000 casts, all 12 kinds; 3-cast cooldown; persistent event text/pause; unchanged fight, record and save-status pixels\n";
 }
 
 struct FeatureStorage:Storage {
@@ -81,7 +85,7 @@ static void annotationTests(){
     Game g;g.stage=Stage::Book;syncDossierPages(g,view);assert(g.dossierPages==4);Input read;read.read=true;g.tick(.01f,read);
     for(unsigned p=1;p<=4;++p){g.tick(.01f,{});g.tick(.01f,{true});assert(g.dossierPage==p%4);}
     g.tick(.01f,{});g.tick(.01f,read);assert(g.stage==Stage::Book&&view.bookIndex==9);
-    view.bookCatch=generate(1,0);view.bookCatch.form=0;g.dossierPage=3;syncDossierPages(g,view);assert(g.dossierPages==3&&g.dossierPage==0);
+    view.bookCatch=generate(1,0);view.bookCatch.form=0;g.dossierPage=3;syncDossierPages(g,view);assert(g.dossierPages==2&&g.dossierPage==0);
     std::cout<<"annotations: 12 pairs cover 24 types; either order; original pages unchanged; duplicates; v1 upgrade/reboot; failed/missing saves never unlock; 4-page reading\n";
 }
 static void methodTests(){
@@ -91,14 +95,14 @@ static void methodTests(){
         Method method=Method(m);assert(canvas.textWidth(methodProfile(method).hint)<=119);
         for(unsigned seed=0;seed<100000;++seed){
             Catch c=generateForMethod(seed,seed%3,method),replay=generate(c.seed,c.spot,c.generator);
-            assert(c.form==replay.form&&c.millimetres==replay.millimetres&&c.generator==2);
+            assert(c.form==replay.form&&c.millimetres==replay.millimetres&&c.generator==3);
             if(c.object())++objects[m];
             Catch fish;fish.form=0;
             if(chooseAnomaly(seed,fish,methodProfile(method).reflectionOdds)==Anomaly::DoubleReflection)++reflections[m];
         }
     }
     assert(objects[0]>5000&&objects[0]<7000&&objects[1]>28000&&objects[1]<32000&&objects[2]>10000&&objects[2]<12500);
-    assert(reflections[0]<reflections[1]&&reflections[1]<reflections[2]);
+    assert(reflections[0]==reflections[1]&&reflections[1]<reflections[2]);
     Game selection;Input f;f.method=true;selection.tick(.01f,f);assert(selection.method==Method::Bottom);
     for(unsigned i=0;i<100;++i)selection.tick(.01f,f);assert(selection.method==Method::Bottom);
     selection.tick(.01f,{});selection.tick(.01f,f);assert(selection.method==Method::Deep);
@@ -124,8 +128,58 @@ static void methodTests(){
         }
         assert(wins==300&&heldBroken==300);means[m]/=wins;
     }
-    assert(means[2]>means[0]+1.0f);
-    std::cout<<"methods: object samples/100000 shallow "<<objects[0]<<", bottom "<<objects[1]<<", deep "<<objects[2]<<"; replayable v2 seeds; shore-only F edge and session retention\n";
+    for(float mean:means)assert(mean>2&&mean<4.5f);
+    std::cout<<"methods: object samples/100000 shallow "<<objects[0]<<", bottom "<<objects[1]<<", deep "<<objects[2]<<"; replayable v3 seeds; shore-only F edge and session retention\n";
     std::cout<<"method play: 300/300 wins and 300/300 held-only broken per mode; mean fight "<<means[0]<<" / "<<means[1]<<" / "<<means[2]<<"s; deep reflection odds higher\n";
 }
-void featureTests(){eventTests();annotationTests();methodTests();}
+
+
+static void storyTests(){
+    FeatureStorage storage;Journal j;j.load(storage);
+    // Different legacy appearances collapse to one species without changing source bytes.
+    Catch a;a.form=0;a.millimetres=90;a.generator=1;assert(j.save(a));
+    Catch b=a;b.form=7u<<10;b.generator=2;assert(j.save(b));assert(j.discoveries==1&&j.records==2);
+    Catch c=a;c.form=1u<<15;assert(j.save(c));assert(j.discoveries==2);auto bytes=storage.bytes;
+    Journal reboot;reboot.load(storage);assert(reboot.records==3&&reboot.discoveries==2&&storage.bytes==bytes);
+    uint32_t ordinal=99;Catch found;assert(reboot.find(8,ordinal,found)&&ordinal==1&&found.form==c.form);
+    std::set<unsigned> forms;uint16_t pixels[Width*Height];Canvas canvas(pixels);
+    for(unsigned i=0;i<100000;++i){auto x=generate(i,i%3);auto y=generate(x.seed,x.spot,x.generator);assert(x.form==y.form&&x.millimetres==y.millimetres);if(!x.object())forms.insert(x.form);}
+    assert(forms.size()==16);
+    for(unsigned i=0;i<16;++i){Catch x;x.form=speciesForm(i);assert(x.species()==i);
+        auto* note=fishAnnotation(x,1u<<fishEvidence(i));assert(note&&!fishAnnotation(x,0));
+        for(auto line:note->lines)assert(canvas.textWidth(line)<=222);
+    }
+    for(unsigned i=0;i<=EventCount;++i)for(unsigned variant=0;variant<4;++variant){auto card=eventDossier(i|(variant<<8));for(auto line:card.lines){if(canvas.textWidth(line)>222)std::cerr<<line<<"\n";assert(canvas.textWidth(line)<=222);}}
+    Game shortPlay(5);shortPlay.cast();while(shortPlay.stage==Stage::Waiting)shortPlay.tick(.05f,{});
+    shortPlay.tick(.05f,{true});while(shortPlay.stage==Stage::Fight){Input in;in.action=!shortPlay.surging();shortPlay.tick(.05f,in);}
+    assert(shortPlay.stage==Stage::Caught&&shortPlay.fightAge<3);
+    Game wait(2);wait.cast();for(unsigned i=0;i<2000;++i)wait.tick(.05f,{});assert(wait.stage==Stage::Bite&&wait.paused);
+    Input pause;pause.pause=true;wait.tick(.01f,pause);wait.tick(.01f,{});wait.tick(.01f,{true});assert(wait.stage==Stage::Fight);
+    Game quiet(41);quiet.knownFish=65535;quiet.knownObjects=0xffffff;unsigned repeats=0;
+    for(unsigned i=0;i<2000;++i){unsigned last=quiet.caught.index();quiet.cast();if(i&&quiet.caught.index()==last)++repeats;}assert(repeats<10);
+    Game effect(1);effect.effect=Anomaly::Shift;effect.effectLeft=2;effect.cast();assert(effect.waitFor<1.6f&&effect.effectLeft==1);
+    Input note;note.notes=true;effect.stage=Stage::Caught;effect.tick(.01f,note);assert(effect.stage==Stage::Notes);float time=effect.age;for(unsigned i=0;i<300;++i)effect.tick(.05f,{});assert(effect.age==time&&effect.effectLeft==1);effect.tick(.01f,note);assert(effect.stage==Stage::Caught);
+    effect.anomaly=Anomaly::Knock;effect.eventCode=7;effect.eventPending=false;Input reply;reply.respond=true;effect.tick(.01f,reply);assert(effect.responded&&effect.eventPending&&effect.eventCode==(7|65536));
+    for(auto kind:{Anomaly::FalseClock,Anomaly::FutureReport,Anomaly::Receipt}){
+        Game pending;pending.stage=Stage::Waiting;pending.anomaly=kind;pending.eventCode=unsigned(kind);assert(!pending.anomalyVisible());
+        pending.stage=Stage::Fight;pending.progress=.99f;pending.surgeIn=0;pending.tick(.05f,{true});assert(pending.stage==Stage::Caught&&pending.eventPending);
+    }
+    std::cout<<"story edition: 16 canonical species; legacy grouped without byte changes; 16 evidence-linked fish notes; event text fits; short reel <3s; unattended bite waits; repeat prevention; cast-count effects; notes pause; optional response\n";
+}
+static void notebookTests(){
+    FeatureStorage io;Notebook n;n.load(io);assert(n.state==SaveState::Ready);ReadingState s;
+    for(unsigned type=0;type<8;++type){ReadingState reading;Catch a=object(type),b=a;b.form|=1u<<6;
+        reading.read(a,0,0,true);assert(!reading.unread(a,0)&&reading.unread(b,0));a.form|=1u<<3;assert(!reading.unread(a,0));}
+    ReadingState reading;Catch fish;fish.form=speciesForm(0);reading.read(fish,0,1u<<10,true);assert(reading.entryPage(fish,1u<<10)==1);reading.read(fish,1,1u<<10,true);assert(!reading.unread(fish,1u<<10));
+    s.legacyRead=0x80000001;
+    s.bookmark=8;s.page=1;s.fishRead=256;s.addEvent(6|256);assert(n.save(s));auto original=io.bytes;
+    Notebook reboot;reboot.load(io);assert(reboot.data.legacyRead==0x80000001&&reboot.data.bookmark==8&&reboot.data.page==1&&reboot.data.events[0]==262&&io.bytes==original);
+    for(unsigned i=1;i<=12;++i)s.addEvent(i);assert(n.save(s));assert(n.data.count==12&&n.data.events[0]==12&&n.data.events[11]==1);
+    s.addEvent(7);s.addEvent(7|65536);assert(s.events[0]==65543&&s.events[1]==12);
+    io.partial=true;assert(!n.save(s)&&n.state==SaveState::WriteFailed&&n.data.events[0]==12);auto damaged=io.bytes;
+    Notebook prefix;prefix.load(io);assert(prefix.state==SaveState::Corrupt&&prefix.data.events[0]==12&&io.bytes==damaged);assert(!prefix.save(s)&&io.bytes==damaged);
+    FeatureStorage missing;missing.present=false;Notebook absent;absent.load(missing);assert(absent.state==SaveState::Missing&&!absent.save(s));
+    FeatureStorage invalid;Notebook bad;bad.load(invalid);s.bookmark=FormCount+1;assert(!bad.save(s)&&bad.state==SaveState::WriteFailed&&invalid.bytes.empty());
+    std::cout<<"notebook: append/readback/reboot bookmark and history; last 12 events; response update; partial-write prefix read-only; missing SD and invalid fields cannot report saved\n";
+}
+void featureTests(){eventTests();annotationTests();methodTests();storyTests();notebookTests();}

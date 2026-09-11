@@ -65,22 +65,26 @@ static void tests() {
     assert(std::memcmp(legacy.bytes.data(),originalBytes.data(),originalBytes.size())==0);
     Journal mixed;mixed.load(legacy);assert(mixed.state==SaveState::Ready&&mixed.records==35&&mixed.discoveries==oldBook.discoveries);
     Catch last;assert(mixed.discovery(mixed.discoveries-1,last)&&last.form==photo.form&&last.generator==2);
+    // v3 records append without altering either legacy generation's prefix.
+    Catch fresh=generate(10,1);assert(fresh.generator==3&&mixed.save(fresh));
+    std::ofstream modernFile("build/mixed-v1-v2-v3.pfj",std::ios::binary);modernFile.write(reinterpret_cast<const char*>(legacy.bytes.data()),legacy.bytes.size());modernFile.close();
+    legacy.bytes.resize(35*RecordBytes); // fixture builder only, never device data
     std::ofstream mixedFile("build/mixed-v1-v2.pfj",std::ios::binary);mixedFile.write(reinterpret_cast<const char*>(legacy.bytes.data()),legacy.bytes.size());mixedFile.close();
     for(auto badCatch:{cap,photo}){badCatch.generator=1;uint8_t bytes[RecordBytes];encode(badCatch,1,bytes);Catch out;assert(!decode(bytes,1,out));}
-    for(unsigned version:{0u,3u,UINT32_MAX}){Catch invalid=photo;invalid.generator=version;uint8_t bytes[RecordBytes];encode(invalid,1,bytes);Catch out;assert(!decode(bytes,1,out));}
+    for(unsigned version:{0u,4u,UINT32_MAX}){Catch invalid=photo;invalid.generator=version;uint8_t bytes[RecordBytes];encode(invalid,1,bytes);Catch out;assert(!decode(bytes,1,out));}
     for(unsigned f:{ObjectFlag+ObjectForms,ObjectFlag+1024,UINT32_MAX}){Catch invalid=photo;invalid.form=f;uint8_t bytes[RecordBytes];encode(invalid,1,bytes);Catch out;assert(!decode(bytes,1,out));assert(!mixed.known(invalid));}
     std::set<uint32_t> objectIDs;
     std::set<uint32_t> identities;
     unsigned fishN=0,objectN=0;unsigned traits[7][8]={};
     for(unsigned i=0;i<100000;++i) {
-        Catch c=generate(i,i%3),d=generate(i,i%3);
+        Catch c=generate(i,i%3,2),d=generate(i,i%3,2);
         assert(c.form==d.form&&c.millimetres==d.millimetres);
         assert(c.index()<FormCount&&c.millimetres>0);
         uint8_t encoded[RecordBytes];encode(c,i+1,encoded);Catch restored;
         assert(decode(encoded,i+1,restored));assert(restored.form==c.form&&restored.seed==c.seed);
         assert(!decode(encoded,i+2,restored));
         encoded[17]^=1;assert(!decode(encoded,i+1,restored));
-        identities.insert(c.index());
+        identities.insert(c.form);
         Catch old=generate(i,i%3,1);assert(old.object()==c.object());
         if(c.object()){++objectN;objectIDs.insert(c.form);assert(c.objectType()<ObjectTypes);}
         else {assert(old.form==c.form&&old.millimetres==c.millimetres);++fishN;unsigned t[]={c.body(),c.tail(),c.fin(),c.palette(),c.pattern(),c.face(),c.ornament()};for(int j=0;j<7;++j)++traits[j][t[j]];}
@@ -107,9 +111,9 @@ static void tests() {
     MemoryStorage bad;bad.bytes=io.bytes;bad.bytes[5]^=4;Journal corrupt;corrupt.load(bad);assert(corrupt.state==SaveState::Corrupt&&corrupt.records==0);
     MemoryStorage diskFull;Journal full;full.load(diskFull);diskFull.failWrite=true;assert(!full.save(a)&&full.state==SaveState::WriteFailed&&full.records==0);
     Game idle(20);tick(idle,{},5000);assert(idle.landed==0&&idle.stage==Stage::Shore);
-    Game held(20);tick(held,{true},2000);assert(held.landed==0&&held.stage==Stage::Lost);
-    Game early(20);tick(early,{true});tick(early,{});tick(early,{true});assert(early.stage==Stage::Lost&&early.loss==Loss::Early);
-    Game unattended(42);hook(unattended);tick(unattended,{},2500);assert(unattended.stage==Stage::Lost&&unattended.landed==0);
+    Game held(20);tick(held,{true},2000);assert(held.landed==0&&held.stage==Stage::Bite&&held.paused);
+    Game early(20);tick(early,{true});tick(early,{});tick(early,{true});assert(early.stage==Stage::Waiting);
+    Game unattended(42);hook(unattended);tick(unattended,{},2500);assert(unattended.stage==Stage::Fight&&unattended.paused&&unattended.landed==0);
     Game forced(42);hook(forced);tick(forced,{true},2500);assert(forced.stage==Stage::Lost&&forced.loss==Loss::Broken);
     Game paused(5);hook(paused);Input p;p.pause=true;tick(paused,p);float t=paused.fightAge;tick(paused,{},1200);assert(paused.fightAge==t&&paused.paused);tick(paused,p);assert(!paused.paused);
     Game help(8);hook(help);Input h;h.help=true;tick(help,h);t=help.fightAge;tick(help,{},1200);assert(help.stage==Stage::Help&&help.fightAge==t);tick(help,h);assert(help.stage==Stage::Fight);
@@ -159,24 +163,27 @@ static void tests() {
             for(unsigned line=0;line<6;++line)assert(std::strcmp(card.lines[line],dossier(resized,page).lines[line])==0);
         }
     }
-    assert(mainCards.size()==56);
+    assert(mainCards.size()==64);
     std::cout<<"generator: 100000 samples; "<<fishN<<" fish, "<<objectN<<" objects, "<<identities.size()<<" distinct appearance IDs\n";
-    std::cout<<"gameplay: no-input/held-input/early-hook/no-reel/over-tension all fail to catch; pause/help freeze verified\n";
+    std::cout<<"gameplay: no-input/held-input/early press harmless; unattended pauses; over-tension fails; pause/help freeze verified\n";
     std::cout<<"tracking controller: "<<wins<<"/300 landed; mean fight "<<totalTime/wins<<" seconds (automated, not human playtest)\n";
     std::cout<<"assisted controller: "<<assistedWins<<"/300 landed without A/D, 200ms decisions, mean fight "<<assistedTime/assistedWins<<" seconds; held-only broke "<<heldLosses<<"/300\n";
-    std::cout<<"dossiers: 48 object + 8 fish main records; 24 linked evidence pages form one connected trail; all page layouts fit; modal paging/freezing/return checked\n";
-    std::cout<<"compatibility: v1 fixture exact; mixed v1/v2 append and reload; extended IDs distinct; all 768 object forms sampled; fish generation unchanged in 100000 seeds; invalid versions/bounds rejected\n";
+    std::cout<<"dossiers: 48 object + 16 fish main records; 24 linked evidence pages form one connected trail; all page layouts fit; modal paging/freezing/return checked\n";
+    std::cout<<"compatibility: v1 fixture exact; mixed v1/v2 append and reload; extended IDs distinct; all 768 object forms sampled; legacy v1/v2 fish bytes unchanged in 100000 seeds; invalid versions/bounds rejected\n";
     std::cout<<"journal: dedup excludes size; object namespace separate; restart/partial write/corruption/no SD/disk full checked\n";
 }
 static void renders() {
     Game g(10);ViewState v;v.save=SaveState::Ready;v.discoveries=12;v.saved=true;v.fresh=true;
     snapshot("shore",g,v);
     for(unsigned m=0;m<3;++m){g.method=Method(m);char name[40];std::snprintf(name,sizeof name,"method-%u",m);snapshot(name,g,v);}g.method=Method::Shallow;
-    g.spot=2;snapshot("night",g,v);
+    g.spot=1;snapshot("bay",g,v);g.spot=2;snapshot("night",g,v);
+    v.knownObjects=(1u<<10)|(1u<<16)|(1u<<5)|(1u<<23);g.spot=1;snapshot("changed-bay",g,v);v.knownObjects=0;
+    g.stage=Stage::Notes;v.notebookSave=SaveState::Ready;v.reading.addEvent(unsigned(Anomaly::Knock));g.notePage=2;snapshot("event-note",g,v);g.stage=Stage::Shore;
+
     hook(g);g.fish=.64;g.rod=.56;g.progress=.57;g.tension=.6;snapshot("fight",g,v);
     g.surgeLeft=1;g.tension=.83;snapshot("surge",g,v);
     g.stage=Stage::Bite;snapshot("bite",g,v);
-    g.stage=Stage::Caught;g.caught=generate(987,1);g.landed=3;snapshot("caught",g,v);
+    g.stage=Stage::Caught;g.anomaly=Anomaly::None;g.caught=generate(987,1);g.landed=3;snapshot("caught",g,v);
     g.stage=Stage::Help;snapshot("help",g,v);
     g.stage=Stage::Book;v.bookValid=true;v.bookCatch=generate(1034,0);v.bookIndex=5;snapshot("book",g,v);
     g.stage=Stage::Waiting;g.age=1;g.anomaly=Anomaly::DoubleReflection;snapshot("event-reflection",g,v,1000);
@@ -200,13 +207,20 @@ static void renders() {
         c.clear(rgb(3,10,3));drawCatch(c,f,120,60,2);c.center(109,objectName(type),rgb(189,255,137));
         char path[100];std::snprintf(path,sizeof path,"build/object-%02u.ppm",type);writePPM(path,pixels);
     }
+    std::set<uint32_t> fishRasters;
+    for(unsigned i=0;i<FishSpecies;++i){Catch f;f.form=speciesForm(i);f.millimetres=100;
+        c.clear(rgb(27,32,29));drawCatch(c,f,120,68,1);fishRasters.insert(crc32(reinterpret_cast<uint8_t*>(pixels),sizeof pixels));
+        c.clear(rgb(27,32,29));drawCatch(c,f,125,70,2);c.center(109,speciesName(i),rgb(233,221,188));
+        char path[80];std::snprintf(path,sizeof path,"build/fish-%02u.ppm",i);writePPM(path,pixels);
+    }
+    assert(fishRasters.size()==16);std::cout<<"fish silhouettes: 16 distinct at device scale\n";
     assert(objectRasters.size()==ObjectTypes);std::cout<<"objects: 24 distinct base rasters at device 1x scale\n";
     for(unsigned n=0;n<256;++n) {
         c.clear(rgb(3,10,3));Catch f=generate(mix(n+33),n%3);drawCatch(c,f,120,67,2);
         rasterHashes.insert(crc32(reinterpret_cast<uint8_t*>(pixels),sizeof pixels));
         if(n<48){char path[100];std::snprintf(path,sizeof path,"build/specimen-%02u.ppm",n);writePPM(path,pixels);}
     }
-    assert(rasterHashes.size()>240);std::cout<<"renderer: "<<rasterHashes.size()<<"/256 distinct sample rasters\n";
+    assert(rasterHashes.size()>25);std::cout<<"renderer: "<<rasterHashes.size()<<"/256 distinct sample rasters\n";
     // Render an actual state-machine fight driven by the same controller used above.
     Game demo(1034);v.save=SaveState::Ready;v.bookValid=false;bool reel=true;
     for(unsigned n=0;n<1200;++n) {

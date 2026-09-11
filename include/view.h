@@ -1,6 +1,7 @@
 #pragma once
 #include "game.h"
 #include "journal.h"
+#include "notebook.h"
 #include <cstdint>
 namespace pond {
 constexpr int Width = 240, Height = 135;
@@ -22,7 +23,10 @@ public:
 struct ViewState {
     SaveState save = SaveState::Missing;
     uint32_t discoveries = 0, savedCatches = 0, bookIndex = 0;
-    uint32_t knownObjects = 0, newAnnotations = 0;
+    uint32_t knownObjects = 0, knownFish = 0, newAnnotations = 0;
+    ReadingState reading;
+    SaveState notebookSave = SaveState::Missing;
+    bool unread = false, linkAvailable = false;
     bool fresh = false, saved = false, sound = false, bookValid = false;
     Catch bookCatch;
 };

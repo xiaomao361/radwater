@@ -34,23 +34,34 @@ Catch generate(uint32_t seed, unsigned spot, unsigned version) {
     c.form = body | tail << 3 | fin << 5 | palette << 7 | pattern << 10 | face << 13 | ornament << 15;
     const unsigned base[] = {160, 100, 240, 120, 260, 170, 130, 200};
     c.millimetres = base[body] / 2 + r.below(base[body] * 2);
+    if(version==3)c.form=speciesForm(c.species());
     return c;
+}
+uint32_t speciesForm(unsigned i) {
+    i &= 15;
+    return (i&7) | ((i%4)<<3) | (((i/2)%4)<<5) | ((i%8)<<7)
+        | (((i*3)%8)<<10) | (((i/4)%4)<<13) | ((i>=8?1u:0u)<<15);
+}
+const char* speciesName(unsigned i) {
+    static const char* names[16]={"交班鱼","食堂团鱼","退潮长尾","锅炉河豚","电缆带鱼","门卫角鱼","单面扁鱼","值夜灯鱼",
+        "回声溪鱼","计量团鱼","归航长尾","警报河豚","内线带鱼","签退角鱼","底片扁鱼","十三班灯鱼"};
+    return names[i&15];
 }
 const char* bodyName(unsigned i) {
     static const char* n[] = {"溪鱼", "团鱼", "长尾鱼", "河豚", "带鱼", "角鱼", "扁鱼", "灯鱼"}; return n[i & 7];
 }
 const MethodProfile& methodProfile(Method method) {
     static const MethodProfile profiles[] = {
-        {"浅水","F 浅水：多鱼",1.8f,2.6f,.85f,.14f,48},
-        {"贴底","F 贴底：旧物",2.6f,2.8f,.95f,.13f,36},
-        {"深水","F 深水：异常",3.0f,3.0f,1.0f,.11f,16}
+        {"浅水","F 浅水：多鱼",1.4f,1.4f,.85f,.48f,4},
+        {"贴底","F 贴底：旧物",1.6f,1.4f,.95f,.46f,4},
+        {"深水","F 深水：异常",1.8f,1.4f,1.0f,.44f,3}
     };
     return profiles[unsigned(method)];
 }
 Catch generateForMethod(uint32_t seed,unsigned spot,Method method) {
     Catch first=generate(seed,spot);
     Random choice(seed^0xa65d217bu);
-    // Select whole v2 candidates, retaining the selected seed and exact identity.
+    // Select whole versioned candidates, retaining the selected seed and exact identity.
     // No new record format: replaying generate(c.seed,c.spot,c.generator) still reproduces it.
     if(method==Method::Shallow&&first.object()&&choice.below(2)==0)return generate(choice.next(),spot);
     if(method==Method::Bottom&&!first.object()){
@@ -80,7 +91,7 @@ void catchName(const Catch& c, char* out, size_t cap) {
     if (c.object()) {
         static const char* ages[] = {"寻常", "苔生", "刻纹", "星尘"};
         std::snprintf(out, cap, "%s%s", ages[(c.form >> 6) & 3], objectName(c.objectType()));
-    } else std::snprintf(out, cap, "%s%s", colorName(c.palette()), bodyName(c.body()));
+    } else std::snprintf(out, cap, "%s", speciesName(c.species()));
 }
 static void put32(uint8_t* p, uint32_t x) { for (int i = 0; i < 4; ++i) p[i] = uint8_t(x >> (i * 8)); }
 static uint32_t get32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
@@ -98,37 +109,62 @@ void encode(const Catch& c, uint32_t seq, uint8_t out[RecordBytes]) {
 }
 bool decode(const uint8_t in[RecordBytes], uint32_t seq, Catch& c) {
     if (!seq || get32(in) != 0x314a4650u || get32(in + 4) != seq ||
-        (get32(in + 24) != 1 && get32(in + 24) != GeneratorVersion) || crc32(in, 28) != get32(in + 28)) return false;
+        (get32(in + 24) < 1 || get32(in + 24) > GeneratorVersion) || crc32(in, 28) != get32(in + 28)) return false;
     Catch next; next.form = get32(in + 8); next.seed = get32(in + 12);
     next.millimetres = get32(in + 16); next.spot = get32(in + 20);
     next.generator = get32(in + 24);
     const uint32_t objectLimit = next.generator == 1 ? LegacyObjectForms : ObjectForms;
     if ((next.form >= FishForms && (next.form < ObjectFlag || next.form >= ObjectFlag + objectLimit)) ||
         next.spot > 2 || next.millimetres < 1 || next.millimetres > 2000) return false;
+    if(next.generator==3&&!next.object()&&next.form!=speciesForm(next.species()))return false;
     c = next; return true;
 }
 bool Game::aligned() const { return std::fabs(fish - rod) <= zone(); }
 bool Game::nibble() const { return stage == Stage::Waiting && age > 0.9f && std::fmod(age, 1.3f) < 0.2f; }
-Anomaly chooseAnomaly(uint32_t seed, const Catch& caught, unsigned reflectionOdds) {
+Anomaly chooseAnomaly(uint32_t seed, const Catch& caught, unsigned odds) {
     Random event(seed ^ 0x73c194e5u);
-    if (caught.object() && caught.objectType()==11 && event.below(3)==0) return Anomaly::FalseClock;
-    if (caught.object() && caught.objectType()==9 && event.below(3)==0) return Anomaly::FutureReport;
-    return event.below(reflectionOdds)==0 ? Anomaly::DoubleReflection : Anomaly::None;
+    if(event.below(odds))return Anomaly::None;
+    unsigned kind=1+event.below(EventCount);
+    if(kind==2&&(!caught.object()||caught.objectType()!=11))kind=10;
+    if(kind==3&&(!caught.object()||caught.objectType()!=9))kind=6;
+    if(kind==8&&!caught.object())kind=9;
+    return Anomaly(kind);
 }
 bool Game::anomalyVisible() const {
-    if (anomaly==Anomaly::DoubleReflection) return stage==Stage::Waiting && age>=0.8f && age<1.6f;
-    return anomaly!=Anomaly::None && stage==Stage::Caught && age>=0.2f && age<3.0f;
+    return anomaly!=Anomaly::None && (stage==Stage::Caught||(!catchEvent()&&(stage==Stage::Shore||stage==Stage::Waiting)));
 }
 void Game::lose(Loss why) { loss = why; stage = Stage::Lost; age = 0; }
 void Game::cast() {
+    eventPending=false;
     const auto& profile=methodProfile(method);
-    caught = generateForMethod(random.next(), spot,method);
-    anomaly = Anomaly::None;
-    if (anomalyCooldown) --anomalyCooldown;
-    else { anomaly=chooseAnomaly(caught.seed,caught,profile.reflectionOdds); if(anomaly!=Anomaly::None)anomalyCooldown=3; }
-    waitFor = profile.waitBase + random.below(unsigned(profile.waitSpan*1000)) / 1000.0f;
-    biteWindow = (method==Method::Shallow?1.85f:1.65f) - 0.15f * caught.rarity();
-    stage = Stage::Waiting; age = 0; paused = false;
+    Method active=effectLeft&&effect==Anomaly::Drain?Method::Bottom:method;
+    caught=generateForMethod(random.next(),spot,active);
+    // Bounded rerolls select intact, replayable candidates. Never promise a guaranteed new catch.
+    auto known=[&](const Catch& c){return c.object()?bool(knownObjects&(1u<<c.objectType())):bool(knownFish&(1u<<c.species()));};
+    auto recentCatch=[&](const Catch& c){for(auto id:recent)if(id==c.index())return true;return false;};
+    const bool seekNew=quietCasts>=4&&(knownFish!=65535||knownObjects!=0xffffff);
+    auto score=[&](const Catch& c){return (recentCatch(c)?2:0)+(seekNew&&known(c)?1:0);};
+    for(unsigned n=0;n<12&&score(caught);++n){
+        Catch next=generateForMethod(random.next(),spot,active);
+        if(score(next)<score(caught))caught=next;
+    }
+    if(known(caught))++quietCasts;else quietCasts=0;
+    recent[2]=recent[1];recent[1]=recent[0];recent[0]=caught.index();
+    waitFor=profile.waitBase+random.below(unsigned(profile.waitSpan*1000))/1000.0f;
+    if(effectLeft){if(effect==Anomaly::Shift)waitFor*=.55f;--effectLeft;}
+    anomaly=Anomaly::None;responded=false;
+    if(anomalyCooldown)--anomalyCooldown;
+    else {
+        anomaly=chooseAnomaly(caught.seed,caught,profile.reflectionOdds);
+        if(anomaly!=Anomaly::None){
+            anomalyCooldown=3+random.below(3);
+            if(anomaly==Anomaly::Drain||anomaly==Anomaly::Shift){effect=anomaly;effectLeft=anomaly==Anomaly::Drain?3:2;}
+            eventCode=unsigned(anomaly)|((knownObjects&(1u<<10)?1u:0u)<<8)|((knownObjects&(1u<<16)?1u:0u)<<9);
+            eventPending=!catchEvent();
+        }
+    }
+    biteWindow=2.6f;
+    stage=Stage::Waiting;age=0;paused=false;
 }
 void Game::tick(float seconds, const Input& in) {
     const bool action = in.action && !previous.action;
@@ -140,7 +176,14 @@ void Game::tick(float seconds, const Input& in) {
     const bool left = in.left && !previous.left;
     const bool right = in.right && !previous.right;
     const bool changeMethod = in.method && !previous.method;
+    const bool notes=in.notes&&!previous.notes;
+    const bool respond=in.respond&&!previous.respond;
     previous = in;
+    if(stage==Stage::Notes){if(notes||back)stage=beforeNotes;else if(action||right)++notePage;else if(left&&notePage)--notePage;return;}
+    if(notes&&(stage==Stage::Shore||stage==Stage::Caught||stage==Stage::Lost)){beforeNotes=stage;stage=Stage::Notes;notePage=0;return;}
+    if(respond&&anomaly==Anomaly::Knock&&!responded&&(stage==Stage::Caught||stage==Stage::Shore)){
+        responded=true;eventCode|=1u<<16;eventPending=true;return;
+    }
     // An OS pause never advances an unseen fight by seconds at once.
     float dt = clamp(seconds, 0, 0.05f);
     if (stage == Stage::Dossier) {
@@ -166,7 +209,10 @@ void Game::tick(float seconds, const Input& in) {
         paused = false; return;
     }
     if (book && (stage == Stage::Shore || stage == Stage::Caught || stage == Stage::Lost)) { stage = Stage::Book; return; }
-    if (pause && (stage == Stage::Waiting || stage == Stage::Bite || stage == Stage::Fight)) paused = !paused;
+    if (pause && (stage == Stage::Waiting || stage == Stage::Bite || stage == Stage::Fight)) {
+        paused = !paused;
+        if(!paused&&stage==Stage::Bite)age=0;
+    }
     if (paused) return;
     age += dt;
     switch (stage) {
@@ -178,51 +224,30 @@ void Game::tick(float seconds, const Input& in) {
         break;
     case Stage::Waiting:
         if (age >= waitFor) { stage = Stage::Bite; age = 0; }
-        else if (action) lose(Loss::Early);
+        // Early presses are harmless; the bite still needs a fresh press.
         break;
     case Stage::Bite:
-        if (age > biteWindow) lose(Loss::Late);
+        if (age > biteWindow) { paused=true; age=biteWindow; }
         else if (action) {
             stage = Stage::Fight; age = fightAge = 0; fish = rod = target = 0.5f;
-            progress = 0.18f; tension = 0.12f; turnIn = 0.4f; surgeIn = 2.0f; surgeLeft = 0;
+            progress = 0.18f; tension = 0.12f; turnIn = 0.4f; surgeIn = 0.75f; surgeLeft = 0;
         }
         break;
     case Stage::Fight: {
         fightAge += dt;
-        rod = clamp(rod + (int(in.right) - int(in.left)) * dt * 0.78f, 0.08f, 0.92f);
-        const unsigned b = caught.object() ? 0 : caught.behavior();
-        turnIn -= dt; surgeIn -= dt; surgeLeft -= dt;
-        if (turnIn <= 0) {
-            target = 0.12f + random.below(760) / 1000.0f;
-            turnIn = (b == 1 ? 0.5f : 1.25f) + random.below(800) / 1000.0f;
-        }
-        if (surgeIn <= 0) {
-            surgeLeft = b == 3 ? 1.0f : 0.65f;
-            surgeIn = 3.5f + random.below(1600) / 1000.0f;
-        }
-        float wanted = b == 2 ? 0.5f + 0.34f * std::sin(fightAge * 1.65f) : target;
-        float speed = (b == 0 ? 0.18f : 0.34f) + 0.035f * caught.rarity();
-        speed *= methodProfile(method).fishSpeed;
-        if (surging()) speed *= 1.6f;
-        fish = clamp(fish + clamp(wanted - fish, -speed * dt, speed * dt), 0.08f, 0.92f);
-        // Gentle line-follow assist removes mandatory A/D + Space chords on the tiny keyboard.
-        // Manual steering still overrides it; reeling and releasing remain player decisions.
-        if (!in.left && !in.right)
-            rod = clamp(rod + clamp(fish - rod, -0.31f * dt, 0.31f * dt), 0.08f, 0.92f);
-        const float heft = caught.object() ? 0.8f : clamp(caught.millimetres / 350.0f, 0.6f, 1.7f);
-        if (in.action) {
-            tension += dt * (surging() ? 0.53f : aligned() ? 0.085f + 0.035f * heft : 0.49f);
-            progress += dt * (aligned() ? methodProfile(method).reelRate : -0.09f);
-        } else {
-            tension -= dt * 0.48f;
-            progress -= dt * 0.018f;
-        }
-        tension = clamp(tension, 0, 1);
-        progress = clamp(progress, 0, 1);
-        // Failure takes precedence if both thresholds are crossed on one step.
-        if (tension >= 1) lose(Loss::Broken);
-        else if (progress <= 0 || fightAge >= 40) lose(Loss::Escaped);
-        else if (progress >= 1) { stage = Stage::Caught; age = 0; ++landed; newCatch = true; }
+        fish=.5f+.2f*std::sin(fightAge*2);rod=fish;
+        // One visible struggle. Holding through it stops progress, so releasing remains meaningful.
+        const bool struggle=progress>=.48f&&surgeIn>0;
+        surgeLeft=struggle?.5f:0;
+        if(struggle){
+            if(in.action){tension+=dt*.7f;}
+            else {surgeIn-=dt*2.5f;tension-=dt*1.3f;}
+        } else if(in.action){progress+=dt*methodProfile(method).reelRate;tension+=dt*.1f;}
+        else tension-=dt;
+        tension=clamp(tension,0,1);progress=clamp(progress,0,1);
+        if(tension>=1)lose(Loss::Broken);
+        else if(fightAge>=20){paused=true;fightAge=0;}
+        else if(progress>=1){stage=Stage::Caught;age=0;++landed;newCatch=true;if(catchEvent())eventPending=true;}
         break;
     }
     default: break;
