@@ -245,7 +245,7 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
         footer(c,v.linkAvailable?"空格翻页 T 关联 R 返回":"空格翻页 R 返回");return;
     }
     if(g.stage==Stage::Help){
-        tabs(c,"口袋钓鱼","操作指南");
+        tabs(c,"余波 / RADWATER","操作指南");
         page(c,{"在这里歇一会儿",{"空格抛竿，咬钩后再按一次。","按住收线，挣扎时松一下。","B 图鉴 R 档案 U 找未读","N 手记 T 关联 C 续读","F 钓法 1/2/3 水域 M 音","P 暂停；来不及咬钩会等你。"}});
         footer(c,"空格 / H 返回");return;
     }

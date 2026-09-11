@@ -1,0 +1,5 @@
+docs/FONT-LICENSE.txt -whitespace
+*.pfj binary
+*.bin binary
+*.png binary
+*.gif binary

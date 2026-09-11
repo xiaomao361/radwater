@@ -5,7 +5,7 @@ font = ImageFont.truetype(str(root/'build/NotoSansSC.ttf'), 17)
 panels = [('shore','水域侦测'),('bite','咬钩信号'),('fight','短收线'),('surge','张力警报'),('caught','捕获报告'),('book','标本档案')]
 sheet = Image.new('RGB',(1008,954),'#1b201d')
 d=ImageDraw.Draw(sheet)
-d.text((24,12),'ANGLER / 口袋钓鱼 · 水边来信 v0.4.0',font=font,fill='#e9ddbc')
+d.text((24,12),'RADWATER / 余波 · v0.4.1',font=font,fill='#e9ddbc')
 for i,(name,label) in enumerate(panels):
     x=24+(i%2)*492;y=50+(i//2)*300
     d.text((x,y),label,font=font,fill='#a4ab99')
@@ -50,5 +50,5 @@ for i in range(16):fish.paste(Image.open(root/f'build/fish-{i:02}.ppm'),((i%4)*2
 fish.save(root/'dist/fish.png')
 for name in ['fish.png','screens.png','specimens.png','objects.png','lore.png','features.png','gameplay.gif']:
     source=root/'dist'/name
-    (root/'dist'/f'{source.stem}-v0.4.0{source.suffix}').write_bytes(source.read_bytes())
+    (root/'dist'/f'{source.stem}-v0.4.1{source.suffix}').write_bytes(source.read_bytes())
 print('dist/screens.png, specimens.png, objects.png, lore.png, features.png, gameplay.gif generated from firmware renderer')

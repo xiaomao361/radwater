@@ -8,8 +8,8 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.0'
-name = f'PocketFishing-ADV-v{version}.bin'
+version = '0.4.1'
+name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9
 # Validate ESP image segments, XOR checksum, and appended SHA256 (not just the outer file hash).
@@ -34,7 +34,7 @@ assert all(marker in tests for marker in ['renderer:', 'journal:', 'compatibilit
 flash = re.search(r'Flash:.*used (\d+) bytes', buildlog)
 ram = re.search(r'RAM:.*used (\d+) bytes', buildlog)
 manifest = {
-    'name': 'PocketFishing', 'version': version, 'theme': 'wasteland waterfront / Water Letters (no avatar)',
+    'name': 'Radwater', 'version': version, 'theme': 'wasteland waterfront / Water Letters (no avatar)',
     'target': 'M5Stack Cardputer ADV / ESP32-S3', 'format': 'app-only (M5Launcher)',
     'firmware': name, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest(),
     'static_ram_bytes': int(ram[1]), 'linked_flash_bytes': int(flash[1]), 'build_partition_bytes': 2097152,
@@ -61,11 +61,12 @@ else:
     target.write_bytes(raw)
 (dist/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
 (dist/'SHA256SUMS.txt').write_text(f"{manifest['sha256']}  {name}\n")
-(dist/'安装说明.txt').write_text(f'''口袋钓鱼 v{version}｜水边来信｜Cardputer ADV
+(dist/'安装说明.txt').write_text(f'''余波 Radwater v{version}｜水边来信｜Cardputer ADV
 
 将 {name} 放入已有 FAT32 SD 卡，在已有 M5Launcher 中选中安装。
 这是 app-only 镜像，不包含 bootloader 或分区表；不需要额外资源文件。
 
+改名前后的存档路径保持 /PocketFishing/，v0.4.0与本版互相兼容。
 升级前备份 /PocketFishing/catches-v1.pfj。
 旧收藏直接读取、原样保留；鱼按16种归类展示，数量变小不等于原始记录被删除。
 新渔获使用生成器v3，v0.3.0及更早固件不认识，会在首条v3处停止读取。
@@ -92,7 +93,7 @@ C恢复已保存的阅读页，不恢复关机前的收线进度。
 更多说明见开发与玩法说明.md。
 ''')
 entries = [name, 'manifest.json', 'SHA256SUMS.txt', '安装说明.txt', 'screens.png', 'fish.png', 'specimens.png', 'objects.png', 'lore.png', 'features.png', 'gameplay.gif']
-archive = dist/f'PocketFishing-ADV-v{version}.zip'
+archive = dist/f'Radwater-ADV-v{version}.zip'
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
     for entry in entries:
         z.write(dist/entry, entry)

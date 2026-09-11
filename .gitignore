@@ -1,0 +1,16 @@
+.venv/
+.pio/
+build/
+dist/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+secrets/
+backups/
+*.pfj
+*.pfn
+!tests/fixtures/*.pfj
+# Published app images are intentional downloads, even with a global *.bin ignore.
+!firmware/Radwater-ADV-v*.bin

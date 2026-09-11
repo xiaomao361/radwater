@@ -96,7 +96,7 @@ void setup() {
     M5Cardputer.Speaker.setVolume(55);
     M5Cardputer.Display.fillScreen(TFT_BLACK);
     M5Cardputer.Display.setTextColor(TFT_WHITE);
-    M5Cardputer.Display.println("Pocket Fishing / loading journal...");
+    M5Cardputer.Display.println("Radwater / loading journal...");
     storage.begin();noteStorage.attach(storage.available());journal.load(storage);notebook.load(noteStorage);
     view.reading=notebook.data;view.notebookSave=notebook.state;game=Game(esp_random());refreshView();
     lastTick = lastFrame = lastInput = millis();
