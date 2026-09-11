@@ -72,6 +72,7 @@ struct Input {
     int spot = -1;
     bool read = false;
     bool method = false, notes = false, respond = false;
+    bool activity = false; // Device-only keys (resume, sound) also interrupt the entrance.
 };
 class Game {
 public:
@@ -83,6 +84,8 @@ public:
     Method method = Method::Shallow;
     bool paused = false, newCatch = false;
     float age = 0, waitFor = 0, biteWindow = 0, fightAge = 0;
+    float arrivalAge = 0, shoreIdle = 0;
+    bool arrivalGreeting = true;
     float fish = 0.5f, rod = 0.5f, progress = 0.18f, tension = 0.12f;
     float target = 0.5f, turnIn = 0, surgeIn = 0, surgeLeft = 0;
     unsigned landed = 0;

@@ -179,6 +179,12 @@ void Game::tick(float seconds, const Input& in) {
     const bool notes=in.notes&&!previous.notes;
     const bool respond=in.respond&&!previous.respond;
     previous = in;
+    const float shoreDt = clamp(seconds, 0, 0.05f);
+    const bool active = in.action || in.left || in.right || in.book || in.back || in.help ||
+        in.pause || in.read || in.method || in.notes || in.respond || in.activity || in.spot >= 0;
+    // Presentation only: no RNG, catches, events or saved data advance while sitting.
+    if(active || stage != Stage::Shore){arrivalAge=2.6f;arrivalGreeting=false;shoreIdle=0;}
+    else {arrivalAge=clamp(arrivalAge+shoreDt,0,2.6f);shoreIdle=clamp(shoreIdle+shoreDt,0,60);}
     if(stage==Stage::Notes){if(notes||back)stage=beforeNotes;else if(action||right)++notePage;else if(left&&notePage)--notePage;return;}
     if(notes&&(stage==Stage::Shore||stage==Stage::Caught||stage==Stage::Lost)){beforeNotes=stage;stage=Stage::Notes;notePage=0;return;}
     if(respond&&anomaly==Anomaly::Knock&&!responded&&(stage==Stage::Caught||stage==Stage::Shore)){

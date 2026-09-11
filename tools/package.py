@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.1'
+version = '0.4.4'
 name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9
@@ -30,11 +30,11 @@ assert len(raw) == checksum_pos + 33
 buildlog = (root/'build/firmware-build.log').read_text()
 tests = (root/'build/test-results.txt').read_text()
 assert '[SUCCESS]' in buildlog
-assert all(marker in tests for marker in ['renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
+assert all(marker in tests for marker in ['quiet arrival:', 'renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
 flash = re.search(r'Flash:.*used (\d+) bytes', buildlog)
 ram = re.search(r'RAM:.*used (\d+) bytes', buildlog)
 manifest = {
-    'name': 'Radwater', 'version': version, 'theme': 'wasteland waterfront / Water Letters (no avatar)',
+    'name': 'Radwater', 'version': version, 'theme': 'quiet wasteland waterfront / take a seat (no avatar)',
     'target': 'M5Stack Cardputer ADV / ESP32-S3', 'format': 'app-only (M5Launcher)',
     'firmware': name, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest(),
     'static_ram_bytes': int(ram[1]), 'linked_flash_bytes': int(flash[1]), 'build_partition_bytes': 2097152,
@@ -47,6 +47,7 @@ manifest = {
     'generator_version': 3, 'readable_generator_versions': [1, 2, 3],
     'downgrade': 'v0.3.0 and earlier stop at first v3 record; preserve new journal and use pre-upgrade copy',
     'dossier_pages': {'fish': 1, 'fish_with_annotation': 2, 'object': 3, 'object_with_annotation': 4},
+    'quiet_arrival_seconds': 2.6, 'quiet_idle_timeout': None,
     'ambient_event_types': 12, 'event_cooldown_casts': [3, 5],
     'fishing_methods': ['shallow', 'bottom', 'deep'], 'reel_interaction': 'one short release; no A/D tracking',
     'anti_repeat': 'bounded replayable candidate selection; no guarantee',
@@ -72,6 +73,8 @@ else:
 新渔获使用生成器v3，v0.3.0及更早固件不认识，会在首条v3处停止读取。
 如需回退，请保留完整新档并使用升级前副本；不要用旧工具修复新版日志。
 
+开机先看一把摆好的旧帆布椅，随后视角坐低，总共约2.6秒；空格/Enter随时直接抛竿，其他快捷键也立即响应。
+“坐会儿吧。”淡掉后可一直坐着，没有倒计时或奖励；H查看操作。
 空格抛竿，咬钩再按一次。按住收线，看到挣扎松一下，再按住。
 不用A/D追鱼。持续按住仍会断线；来不及提竿会暂停，P继续。
 R读档案，B收藏，U找未读，T关联物品，C继续上次阅读。
@@ -92,7 +95,7 @@ C恢复已保存的阅读页，不恢复关机前的收线进度。
 附带图片和GIF均为同源电脑渲染，不是真机实拍。
 更多说明见开发与玩法说明.md。
 ''')
-entries = [name, 'manifest.json', 'SHA256SUMS.txt', '安装说明.txt', 'screens.png', 'fish.png', 'specimens.png', 'objects.png', 'lore.png', 'features.png', 'gameplay.gif']
+entries = [name, 'manifest.json', 'SHA256SUMS.txt', '安装说明.txt', 'screens.png', 'fish.png', 'specimens.png', 'objects.png', 'lore.png', 'features.png', 'gameplay.gif', 'arrival.png', 'arrival.gif', 'rest-240x135.png']
 archive = dist/f'Radwater-ADV-v{version}.zip'
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
     for entry in entries:
