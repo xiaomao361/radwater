@@ -183,6 +183,11 @@ static void notebookTests(){
     std::cout<<"notebook: append/readback/reboot bookmark and history; last 12 events; response update; partial-write prefix read-only; missing SD and invalid fields cannot report saved\n";
 }
 static void arrivalTests(){
+    // Before the view transition, time alone must not deform the placed chair.
+    uint16_t still[Width*Height],later[Width*Height];Canvas first(still),second(later);ViewState view;
+    Game placed;draw(first,placed,view,0);
+    for(unsigned i=1;i<=30;++i){placed.arrivalAge=i*.05f;draw(second,placed,view,0);assert(!std::memcmp(still,later,sizeof still));}
+
     Game rested(712),direct(712);
     for(unsigned i=0;i<12000;++i)rested.tick(.05f,{});
     assert(rested.stage==Stage::Shore&&rested.landed==0&&!rested.eventPending&&!rested.newCatch);

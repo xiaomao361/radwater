@@ -231,7 +231,6 @@ static uint16_t fadeInk(uint16_t a,uint16_t b,float t){
 }
 // The quiet shore uses the existing framebuffer and primitives; no bitmap/video assets.
 static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
-    const float unfold=ease(g.arrivalAge/1.1f);
     const bool seated=g.arrivalAge>=1.75f;
     // Two coherent views, separated by a short fade, instead of stretching a chair into arms.
     const float sit=seated?.86f+.14f*ease((g.arrivalAge-1.75f)/.85f):0.f;
@@ -293,29 +292,32 @@ static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
     c.rect(cx-1,cy-10,11,10,cream);c.rect(cx-1,cy-11,11,2,ink);c.line(cx+1,cy-10,cx+7,cy-10,wood);
     c.rect(cx,cy-3,2,3,rust);c.pixel(cx+8,cy-8,wood);
     if(!seated){
-        // X-frame rails keep a fixed length. Both feet spread around a fixed centre
-        // on the same ground plane; the seat lowers as the scissors open.
-        const int mid=80,footY=128;
-        const float span=6.f+26.f*unfold;
-        const int half=int(span*.5f),rise=int(std::sqrt(38.f*38.f-span*span));
-        const int l=mid-half,r=mid+half,seat=footY-rise;
-        // Rear frame (a small, constant perspective offset).
-        c.line(l+5,seat-3,r+5,footY-3,wood);c.line(r+5,seat-3,l+5,footY-3,wood);
-        c.line(l,seat,r,footY,rust);c.line(r,seat,l,footY,rust);
-        c.rect(l-2,footY,5,2,wood);c.rect(r-2,footY,5,2,wood);
-        c.pixel(mid,(seat+footY)/2,cream);
-        // A real seat surface and upright backrest, never a full-screen polygon.
-        c.triangle(l,seat,r,seat,r+5,seat-5,canvas);
-        c.triangle(l,seat,r+5,seat-5,l+5,seat-5,canvas);
-        c.line(l,seat,r,seat,ink);
-        c.line(l+5,seat-5,l+4,seat-30,rust);c.line(r+5,seat-5,r+6,seat-30,rust);
-        c.triangle(l+5,seat-28,r+5,seat-28,l+6,seat-7,canvas);
-        c.triangle(r+5,seat-28,l+6,seat-7,r+4,seat-7,canvas);
-        c.line(l+5,seat-28,r+5,seat-28,wood);
-        c.line(l+6,seat-8,r+4,seat-8,wood);
-        c.line(l-2,seat-6,l+5,seat-10,ink);c.line(r+1,seat-6,r+7,seat-10,ink);
-        c.line(l-2,seat-5,l+5,seat-9,canvas);c.line(r+1,seat-5,r+7,seat-9,canvas);
-        c.line(l-1,seat-5,l,seat+5,rust);c.line(r+1,seat-5,r,seat+5,rust);
+        // A placed, three-quarter canvas chair. Fixed silhouette throughout the opening.
+        const auto clothLight=rgb(115,118,77),clothDark=rgb(67,77,53);
+        // Tubular frame and crossed legs, grounded below the fabric seat.
+        c.line(52,96,97,128,ink);c.line(99,98,57,128,ink);
+        c.line(53,97,97,127,rust);c.line(54,97,98,127,wood);
+        c.line(99,99,57,127,rust);c.line(100,99,58,127,wood);
+        c.line(62,100,86,123,wood);c.line(90,99,66,123,wood);
+        c.rect(54,127,8,2,ink);c.rect(94,127,8,2,ink);
+        c.ellipse(77,113,2,2,ink);c.pixel(77,113,gold);
+        // Sloping backrest with a dark edge, broad olive fabric, and a sagging seam.
+        c.triangle(46,54,82,61,55,99,ink);c.triangle(82,61,55,99,86,105,ink);
+        c.triangle(49,58,79,64,57,96,canvas);c.triangle(79,64,57,96,83,101,canvas);
+        c.triangle(49,58,55,61,57,96,clothDark);
+        c.line(50,59,78,65,clothLight);c.line(58,94,81,99,clothLight);
+        c.line(54,77,60,85,clothDark);c.line(60,85,72,89,clothDark);c.line(72,89,79,84,clothDark);
+        c.line(46,54,55,103,rust);c.line(47,54,56,103,wood);
+        c.line(82,61,87,108,rust);c.line(83,61,88,108,wood);
+        c.rect(44,53,5,5,ink);c.rect(80,60,5,5,ink);
+        // Seat projects forward to the right, with an upholstered front lip.
+        c.triangle(56,98,84,103,105,95,clothDark);c.triangle(56,98,105,95,80,91,canvas);
+        c.line(58,98,84,102,clothLight);c.line(84,103,105,95,ink);c.line(84,104,105,96,wood);
+        // Two substantial armrests instead of wire-thin extensions.
+        c.line(51,91,73,86,ink);c.line(51,92,73,87,canvas);c.line(51,93,73,88,clothLight);
+        c.line(86,96,106,88,ink);c.line(86,97,106,89,canvas);c.line(86,98,106,90,clothLight);
+        c.line(72,89,66,110,rust);c.line(104,92,96,111,rust);
+        c.pixel(53,72,wood);c.pixel(80,80,clothLight);c.line(66,95,69,96,clothDark);
     }else{
         const int drop=between(3,0,ease((g.arrivalAge-1.75f)/.85f));
         // Independently drawn first-person arms: no backrest is pulled through the camera.

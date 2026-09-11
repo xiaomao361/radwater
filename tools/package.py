@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.3'
+version = '0.4.4'
 name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9
@@ -73,7 +73,7 @@ else:
 新渔获使用生成器v3，v0.3.0及更早固件不认识，会在首条v3处停止读取。
 如需回退，请保留完整新档并使用升级前副本；不要用旧工具修复新版日志。
 
-开机椅子展开、视角坐低约2.6秒；空格/Enter随时直接抛竿，其他快捷键也立即响应。
+开机先看一把摆好的旧帆布椅，随后视角坐低，总共约2.6秒；空格/Enter随时直接抛竿，其他快捷键也立即响应。
 “坐会儿吧。”淡掉后可一直坐着，没有倒计时或奖励；H查看操作。
 空格抛竿，咬钩再按一次。按住收线，看到挣扎松一下，再按住。
 不用A/D追鱼。持续按住仍会断线；来不及提竿会暂停，P继续。
