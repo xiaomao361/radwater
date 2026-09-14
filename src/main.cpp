@@ -6,6 +6,7 @@
 #include "journal.h"
 #include "view.h"
 #include "lore.h"
+#include "sound.h"
 
 using namespace pond;
 namespace {
@@ -59,6 +60,11 @@ uint32_t lastTick = 0, lastFrame = 0, lastInput = 0;
 bool oldLeft = false, oldRight = false, oldMute = false;
 bool dim = false;
 Stage oldStage = Stage::Shore;
+int8_t sounds[4][SoundSamples];
+void playSound(Sound sound){
+    if(view.sound&&sound!=Sound::None)
+        M5Cardputer.Speaker.playRaw(sounds[unsigned(sound)],SoundSamples,SoundRate,false,1,0,true);
+}
 bool unread(const Catch& c){return view.reading.unread(c,view.knownObjects);}
 unsigned relatedType(const Catch& c){return c.object()?evidenceNext(c.objectType()):fishEvidence(c.species());}
 void loadBook() {
@@ -94,6 +100,7 @@ void setup() {
     M5Cardputer.Display.setBrightness(100);
     M5Cardputer.Display.setSwapBytes(true);
     M5Cardputer.Speaker.setVolume(55);
+    for(unsigned i=0;i<4;++i)synthSound(Sound(i),sounds[i]);
     M5Cardputer.Display.fillScreen(TFT_BLACK);
     M5Cardputer.Display.setTextColor(TFT_WHITE);
     M5Cardputer.Display.println("Radwater / loading journal...");
@@ -115,7 +122,7 @@ void loop() {
     if(game.stage==Stage::Book&&!view.bookValid)in.read=false;
     if(key('1'))in.spot=0;else if(key('2'))in.spot=1;else if(key('3'))in.spot=2;
     bool mute = key('m');
-    if(mute&&!oldMute) { view.sound=!view.sound; if(view.sound) M5Cardputer.Speaker.tone(660,60); }
+    if(mute&&!oldMute) { view.sound=!view.sound; if(view.sound)playSound(Sound::Splash);else M5Cardputer.Speaker.stop(); }
     oldMute=mute;
     bool active = in.action || in.left || in.right || in.book || in.back || in.help || in.pause || in.read || in.method || in.notes || in.respond || key('u') || key('t') || key('c') || mute || in.spot>=0;
     if(active) lastInput=now;
@@ -162,10 +169,7 @@ void loop() {
     }
     if(game.stage!=oldStage) {
         if(game.stage==Stage::Book&&oldStage!=Stage::Dossier){view.bookIndex=journal.discoveries?journal.discoveries-1:0;selectUnread();}
-        if(view.sound) {
-            if(game.stage==Stage::Bite)M5Cardputer.Speaker.tone(880,90);
-            if(game.stage==Stage::Caught&&oldStage!=Stage::Dossier)M5Cardputer.Speaker.tone(1175,100);
-        }
+        playSound(soundFor(oldStage,game.stage,game.caught.object()));
         oldStage=game.stage;
     }
     const Catch& shown=game.stage==Stage::Book||(game.stage==Stage::Dossier&&game.dossierBook)?view.bookCatch:game.caught;
