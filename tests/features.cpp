@@ -2,6 +2,8 @@
 #include "view.h"
 #include "lore.h"
 #include "notebook.h"
+#include "sound.h"
+#include <fstream>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -211,4 +213,23 @@ static void arrivalTests(){
     Input device;device.activity=true;Game resume;resume.tick(.01f,device);assert(!resume.arrivalGreeting);
     std::cout<<"quiet arrival: 600s idle without catch/event; same RNG/record; immediate cast across 180 entrance frames; held-key bite protection; modal return and device shortcuts\n";
 }
-void featureTests(){eventTests();annotationTests();methodTests();storyTests();notebookTests();arrivalTests();}
+static void soundTests(){
+    std::set<uint32_t> hashes;
+    for(unsigned kind=0;kind<4;++kind){
+        int8_t clip[SoundSamples],again[SoundSamples];synthSound(Sound(kind),clip);synthSound(Sound(kind),again);
+        assert(!std::memcmp(clip,again,sizeof clip)&&clip[0]==0&&clip[SoundSamples-1]==0);
+        unsigned energy=0;for(int sample:clip){assert(sample>=-96&&sample<=96);energy+=sample*sample;}
+        assert(energy>10000);hashes.insert(crc32(reinterpret_cast<uint8_t*>(clip),sizeof clip));
+        if(kind==unsigned(Sound::Bite))for(unsigned i=320;i<480;++i)assert(clip[i]==0);
+        std::ofstream out("build/sound-"+std::to_string(kind)+".raw",std::ios::binary);out.write(reinterpret_cast<char*>(clip),sizeof clip);
+    }
+    assert(hashes.size()==4);
+    assert(soundFor(Stage::Shore,Stage::Waiting,false)==Sound::Splash);
+    assert(soundFor(Stage::Waiting,Stage::Bite,false)==Sound::Bite);
+    assert(soundFor(Stage::Fight,Stage::Caught,false)==Sound::Fish);
+    assert(soundFor(Stage::Fight,Stage::Caught,true)==Sound::Metal);
+    for(auto modal:{Stage::Help,Stage::Book,Stage::Notes,Stage::Dossier})
+        for(auto to:{Stage::Waiting,Stage::Bite,Stage::Caught})assert(soundFor(modal,to,false)==Sound::None);
+    std::cout<<"sound: four distinct deterministic 120ms clips; bounded levels, zero endpoints, bite gap; gameplay-only cues and silent modal return\n";
+}
+void featureTests(){soundTests();eventTests();annotationTests();methodTests();storyTests();notebookTests();arrivalTests();}

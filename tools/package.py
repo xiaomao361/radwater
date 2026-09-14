@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.4'
+version = '0.4.5'
 name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9
@@ -30,7 +30,7 @@ assert len(raw) == checksum_pos + 33
 buildlog = (root/'build/firmware-build.log').read_text()
 tests = (root/'build/test-results.txt').read_text()
 assert '[SUCCESS]' in buildlog
-assert all(marker in tests for marker in ['quiet arrival:', 'renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
+assert all(marker in tests for marker in ['sound:', 'quiet arrival:', 'renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
 flash = re.search(r'Flash:.*used (\d+) bytes', buildlog)
 ram = re.search(r'RAM:.*used (\d+) bytes', buildlog)
 manifest = {
@@ -47,6 +47,8 @@ manifest = {
     'generator_version': 3, 'readable_generator_versions': [1, 2, 3],
     'downgrade': 'v0.3.0 and earlier stop at first v3 record; preserve new journal and use pre-upgrade copy',
     'dossier_pages': {'fish': 1, 'fish_with_annotation': 2, 'object': 3, 'object_with_annotation': 4},
+    'sound': 'procedural 8kHz mono, four 120ms cues, muted by default',
+    'sound_pcm_ram_bytes': 3840,
     'quiet_arrival_seconds': 2.6, 'quiet_idle_timeout': None,
     'ambient_event_types': 12, 'event_cooldown_casts': [3, 5],
     'fishing_methods': ['shallow', 'bottom', 'deep'], 'reel_interaction': 'one short release; no A/D tracking',
@@ -76,6 +78,7 @@ else:
 开机先看一把摆好的旧帆布椅，随后视角坐低，总共约2.6秒；空格/Enter随时直接抛竿，其他快捷键也立即响应。
 “坐会儿吧。”淡掉后可一直坐着，没有倒计时或奖励；H查看操作。
 空格抛竿，咬钩再按一次。按住收线，看到挣扎松一下，再按住。
+新增落水、咬钩、鱼/旧物上岸短音效。默认静音，M开启或立即静音；无额外素材。
 不用A/D追鱼。持续按住仍会断线；来不及提竿会暂停，P继续。
 R读档案，B收藏，U找未读，T关联物品，C继续上次阅读。
 N看手记与最近12条随机事件；水下敲门后可在结果页E回应，也可忽略。
