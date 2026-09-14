@@ -18,6 +18,9 @@ class Journal {
     uint16_t order[FormCount] = {};
     Storage* storage = nullptr;
     uint32_t typesSeen = 0, fishSeen = 0;
+    uint16_t largest[FishSpecies]={};
+    Catch indexed(unsigned ordinal)const{Catch c;unsigned id=order[ordinal];c.form=id<FishSpecies?speciesForm(id):ObjectFlag|(id-FishSpecies);return c;}
+    static unsigned groupId(const Catch& c){return c.object()?FishSpecies+c.objectType():c.species();}
     static bool test(const uint8_t* map, uint32_t i) { return (map[i / 8] & (1u << (i % 8))) != 0; }
     static void mark(uint8_t* map, uint32_t i) { map[i / 8] |= uint8_t(1u << (i % 8)); }
 public:
@@ -25,9 +28,31 @@ public:
     uint32_t records = 0, discoveries = 0;
     uint32_t knownFishSpecies() const { return fishSeen; }
     uint32_t knownObjectTypes() const { return typesSeen; }
+    uint32_t bestSize(unsigned species)const{return species<FishSpecies?largest[species]:0;}
+    unsigned groupCount()const{return __builtin_popcount(typesSeen)+__builtin_popcount(fishSeen);}
+    bool groupAt(unsigned group,unsigned& ordinal,Catch& out){
+        unsigned count=0;uint64_t seenGroups=0;
+        for(unsigned i=0;i<discoveries;++i){Catch c=indexed(i);uint64_t bit=uint64_t(1)<<groupId(c);
+            if(!(seenGroups&bit)){if(count++==group){ordinal=i;return discovery(i,out);}seenGroups|=bit;}}
+        return false;
+    }
+    unsigned groupOf(const Catch& selected){
+        unsigned count=0;uint64_t seenGroups=0;
+        for(unsigned i=0;i<discoveries;++i){Catch c=indexed(i);uint64_t bit=uint64_t(1)<<groupId(c);
+            if(!(seenGroups&bit)){if(groupId(c)==groupId(selected))return count;++count;seenGroups|=bit;}}
+        return 0;
+    }
+    bool variant(const Catch& selected,unsigned step,unsigned& ordinal,Catch& out,unsigned& count){
+        count=0;unsigned choices[32];
+        for(unsigned i=0;i<discoveries;++i){Catch c=indexed(i);if(groupId(c)==groupId(selected))choices[count++]=i;}
+        if(!count)return false;
+        unsigned current=0;for(unsigned i=0;i<count;++i)if(choices[i]==ordinal)current=i;
+        ordinal=choices[(current+step)%count];return discovery(ordinal,out);
+    }
     bool known(const Catch& c) const { return c.index() < FormCount && test(seen, c.index()); }
     void load(Storage& io) {
         storage = &io; records = discoveries = typesSeen = fishSeen = 0; std::memset(seen, 0, sizeof seen);
+        std::memset(largest,0,sizeof largest);
         uint32_t bytes = 0;
         if (!io.size(bytes)) { state = SaveState::Missing; return; }
         state = SaveState::Ready;
@@ -35,7 +60,7 @@ public:
         for (uint32_t pos = 0; uint64_t(pos) + RecordBytes <= bytes; pos += RecordBytes) {
             if (!io.read(pos, b, RecordBytes) || !decode(b, records + 1, c)) { state = SaveState::Corrupt; return; }
             if (!known(c)) { offsets[c.index()]=records*RecordBytes;order[discoveries]=uint16_t(c.index());mark(seen, c.index()); ++discoveries; }
-            if (c.object()) typesSeen |= 1u << c.objectType(); else fishSeen |= 1u << c.species();
+            if (c.object()) typesSeen |= 1u << c.objectType(); else {fishSeen |= 1u << c.species();if(c.millimetres>largest[c.species()])largest[c.species()]=c.millimetres;}
             ++records;
         }
         if (bytes % RecordBytes) state = SaveState::Corrupt;
@@ -52,7 +77,7 @@ public:
             state = SaveState::WriteFailed; return false;
         }
         if (!known(c)) { offsets[c.index()]=records*RecordBytes;order[discoveries]=uint16_t(c.index());mark(seen, c.index()); ++discoveries; }
-        if (c.object()) typesSeen |= 1u << c.objectType(); else fishSeen |= 1u << c.species();
+        if (c.object()) typesSeen |= 1u << c.objectType(); else {fishSeen |= 1u << c.species();if(c.millimetres>largest[c.species()])largest[c.species()]=c.millimetres;}
         ++records; return true;
     }
     bool discovery(uint32_t ordinal, Catch& out) {

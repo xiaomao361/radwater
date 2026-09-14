@@ -3,6 +3,7 @@
 #include "lore.h"
 #include "notebook.h"
 #include "sound.h"
+#include "reading_navigation.h"
 #include <fstream>
 #include <cassert>
 #include <cstring>
@@ -171,14 +172,14 @@ static void storyTests(){
 static void notebookTests(){
     FeatureStorage io;Notebook n;n.load(io);assert(n.state==SaveState::Ready);ReadingState s;
     for(unsigned type=0;type<8;++type){ReadingState reading;Catch a=object(type),b=a;b.form|=1u<<6;
-        reading.read(a,0,0,true);assert(!reading.unread(a,0)&&reading.unread(b,0));a.form|=1u<<3;assert(!reading.unread(a,0));}
+        reading.read(a,0,0,true);assert(reading.unread(a,0)&&reading.started(a)&&reading.entryPage(a,0)==1);reading.read(a,2,0,true);assert(reading.unread(a,0));reading.read(a,1,0,true);assert(!reading.unread(a,0)&&reading.unread(b,0));a.form|=1u<<3;assert(!reading.unread(a,0));}
     ReadingState reading;Catch fish;fish.form=speciesForm(0);reading.read(fish,0,1u<<10,true);assert(reading.entryPage(fish,1u<<10)==1);reading.read(fish,1,1u<<10,true);assert(!reading.unread(fish,1u<<10));
     s.legacyRead=0x80000001;
     s.bookmark=8;s.page=1;s.fishRead=256;s.addEvent(6|256);assert(n.save(s));auto original=io.bytes;
     Notebook reboot;reboot.load(io);assert(reboot.data.legacyRead==0x80000001&&reboot.data.bookmark==8&&reboot.data.page==1&&reboot.data.events[0]==262&&io.bytes==original);
     for(unsigned i=1;i<=12;++i)s.addEvent(i);assert(n.save(s));assert(n.data.count==12&&n.data.events[0]==12&&n.data.events[11]==1);
     s.addEvent(7);s.addEvent(7|65536);assert(s.events[0]==65543&&s.events[1]==12);
-    io.partial=true;assert(!n.save(s)&&n.state==SaveState::WriteFailed&&n.data.events[0]==12);auto damaged=io.bytes;
+    s.page=2;io.partial=true;assert(!n.save(s)&&n.state==SaveState::WriteFailed&&n.data.events[0]==12);auto damaged=io.bytes;
     Notebook prefix;prefix.load(io);assert(prefix.state==SaveState::Corrupt&&prefix.data.events[0]==12&&io.bytes==damaged);assert(!prefix.save(s)&&io.bytes==damaged);
     FeatureStorage missing;missing.present=false;Notebook absent;absent.load(missing);assert(absent.state==SaveState::Missing&&!absent.save(s));
     FeatureStorage invalid;Notebook bad;bad.load(invalid);s.bookmark=FormCount+1;assert(!bad.save(s)&&bad.state==SaveState::WriteFailed&&invalid.bytes.empty());
@@ -232,4 +233,69 @@ static void soundTests(){
         for(auto to:{Stage::Waiting,Stage::Bite,Stage::Caught})assert(soundFor(modal,to,false)==Sound::None);
     std::cout<<"sound: four distinct deterministic 120ms clips; bounded levels, zero endpoints, bite gap; gameplay-only cues and silent modal return\n";
 }
-void featureTests(){soundTests();eventTests();annotationTests();methodTests();storyTests();notebookTests();arrivalTests();}
+
+static void optimizationTests(){
+    FeatureStorage io;Journal j;j.load(io);
+    for(unsigned type=0;type<24;++type)for(unsigned variant=0;variant<32;++variant){
+        Catch c=object(type);c.form|=(variant&7)<<3|(variant>>3)<<6;assert(j.save(c));
+    }
+    for(unsigned species=0;species<16;++species){Catch c;c.form=speciesForm(species);c.millimetres=90;assert(j.save(c));c.millimetres=170;assert(j.save(c));}
+    assert(j.discoveries==784&&j.groupCount()==40&&j.records==800);
+    auto original=io.bytes;Journal reboot;reboot.load(io);assert(io.bytes==original&&reboot.groupCount()==40);
+    for(unsigned group=0;group<40;++group){unsigned ordinal=0,count=0;Catch c;assert(reboot.groupAt(group,ordinal,c)&&reboot.groupOf(c)==group);
+        unsigned expected=c.object()?32:1;std::set<unsigned> forms;
+        for(unsigned n=0;n<expected;++n){forms.insert(c.index());assert(reboot.variant(c,1,ordinal,c,count)&&count==expected);}
+        assert(forms.size()==expected);if(!c.object())assert(reboot.bestSize(c.species())==170&&c.millimetres==90);
+    }
+    io.partial=true;Catch larger;larger.form=speciesForm(0);larger.millimetres=200;assert(!j.save(larger)&&j.bestSize(0)==170);
+    for(unsigned type=0;type<24;++type)for(unsigned surface=0;surface<4;++surface){
+        ReadingState reading;Catch c=object(type);c.form|=surface<<6;
+        reading.read(c,2,0,true);assert(reading.started(c)&&!reading.mainRead(c));
+        reading.read(c,0,0,true);assert(!reading.mainRead(c)&&reading.entryPage(c,0)==1);
+        reading.read(c,1,0,true);assert(reading.mainRead(c));
+        Catch color=c;color.form|=1<<3;assert(reading.mainRead(color));
+        Catch other=c;other.form^=1<<6;assert(reading.mainRead(other)==(type>=8));
+    }
+    // Hand-built old snapshot: page-zero flags, a bookmark, events and annotations.
+    FeatureStorage legacy;legacy.bytes.resize(96);auto put=[&](unsigned off,uint32_t value){for(unsigned i=0;i<4;++i)legacy.bytes[off+i]=value>>(8*i);};
+    put(0,0x314e4650);put(4,1);put(8,1);put(12,1u<<10);put(24,object(10).index());put(28,2);put(32,1);put(36,6|256);put(84,1);put(92,crc32(legacy.bytes.data(),92));
+    auto oldBytes=legacy.bytes;Notebook old;old.load(legacy,true);assert(old.state==SaveState::Ready&&!old.save(old.data));
+    FeatureStorage target;Notebook current;current.load(target);current.importLegacy(old);
+    assert(current.data.started(object(10))&&!current.data.mainRead(object(10))&&current.data.entryPage(object(10),0)==1);
+    assert(current.data.bookmark==object(10).index()&&current.data.page==2&&current.data.events[0]==262&&current.data.fishRead==1);
+    assert(current.save(current.data)&&target.bytes.size()==128&&legacy.bytes==oldBytes);
+    auto saved=target.bytes;assert(current.save(current.data)&&target.bytes==saved);
+    current.data.read(object(10),1,0,true);current.data.read(object(10),2,0,true);assert(current.save(current.data));
+    Notebook restored;restored.load(target);assert(restored.data.mainRead(object(10))&&restored.data.events[0]==262);
+    legacy.bytes.push_back(1);old.load(legacy,true);FeatureStorage blocked;Notebook partial;partial.load(blocked);partial.importLegacy(old);
+    assert(partial.state==SaveState::Corrupt&&partial.data.events[0]==262&&!partial.save(partial.data)&&blocked.bytes.empty());
+    FeatureStorage links;Journal linked;linked.load(links);
+    assert(linked.save(object(9))&&linked.save(object(11))&&linked.save(object(10))&&linked.save(object(16)));
+    ReadingState reader;unsigned ordinal=0;Catch selected;
+    uint32_t before=(1u<<9)|(1u<<11)|(1u<<10),known=before|(1u<<16);
+    int next=unreadEntry(linked,reader,known,ordinal,selected,before);
+    assert(next==3&&(selected.objectType()==10||selected.objectType()==16));
+    reader.read(selected,3,known,true);next=unreadEntry(linked,reader,known,ordinal,selected);
+    assert(next==3&&(selected.objectType()==9||selected.objectType()==11));
+    reader.read(selected,3,known,true);next=unreadEntry(linked,reader,known,ordinal,selected);
+    assert(next==0);reader.read(selected,0,known,true);assert(unreadEntry(linked,reader,known,ordinal,selected)==1);
+    Catch linkedFish;linkedFish.form=speciesForm(0);assert(newlyLinked(linkedFish,0,1u<<fishEvidence(0)));
+    for(unsigned type:{9u,11u,10u,16u})for(unsigned p=0;p<4;++p)reader.read(object(type),p,known,true);
+    assert(unreadEntry(linked,reader,known,ordinal,selected)==-1);
+    BatteryState battery;
+    assert(battery.percent==-1);battery.update(3700);assert(battery.percent==50&&battery.millivolts==3700);
+    battery.update(4100);assert(battery.percent==100);battery.update(3300);assert(battery.percent==0);
+    for(int mv:{-1,0,2400,4501,5000}){battery.update(mv);assert(battery.percent==-1&&battery.millivolts==-1);}
+    battery.update(3700);assert(battery.percent==50);
+    Game g;for(auto stage:{Stage::Help,Stage::Book,Stage::Notes,Stage::Dossier,Stage::Caught}){g.stage=stage;assert(!animatedView(g));}
+    g.stage=Stage::Fight;assert(animatedView(g));g.paused=true;assert(!animatedView(g));g.stage=Stage::Shore;assert(animatedView(g));
+    uint16_t specimen[Width*Height],screen[Width*Height];Canvas specimenCanvas(specimen),screenCanvas(screen);
+    for(unsigned kind=0;kind<40;++kind){
+        ViewState v;v.bookValid=true;v.groups=40;v.variants=32;
+        if(kind<16)v.bookCatch.form=speciesForm(kind);else v.bookCatch=object(kind-16);
+        Game book;book.stage=Stage::Book;specimenCanvas.clear(0xf81f);drawCatch(specimenCanvas,v.bookCatch,125,83,2);draw(screenCanvas,book,v,0);
+        for(unsigned y=103;y<119;++y)for(unsigned x=0;x<Width;++x)if(specimen[y*Width+x]!=0xf81f)assert(screen[y*Width+x]==specimen[y*Width+x]);
+    }
+    std::cout<<"optimization: 800 records / 784 appearances / 40 groups; all variants accessible; verified size maxima; 48 page identities; v1 read-only import and v2 reboot; identical snapshots skipped; corruption blocked; invalid battery unknown; static refresh policy\n";
+}
+void featureTests(){optimizationTests();soundTests();eventTests();annotationTests();methodTests();storyTests();notebookTests();arrivalTests();}

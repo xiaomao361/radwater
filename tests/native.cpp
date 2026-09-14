@@ -173,7 +173,7 @@ static void tests() {
     std::cout<<"journal: dedup excludes size; object namespace separate; restart/partial write/corruption/no SD/disk full checked\n";
 }
 static void renders() {
-    Game g(10);ViewState v;v.save=SaveState::Ready;v.discoveries=12;v.saved=true;v.fresh=true;
+    Game g(10);ViewState v;v.save=SaveState::Ready;v.discoveries=12;v.bestSize=410;v.groups=9;v.bookGroup=3;v.variants=5;v.battery.update(3700);v.saved=true;v.fresh=true;
     Game arrival;
     for(unsigned frame=0;frame<150;++frame){
         char name[40];std::snprintf(name,sizeof name,"arrival-%03u",frame);
@@ -194,13 +194,24 @@ static void renders() {
     for(unsigned m=0;m<3;++m){g.method=Method(m);char name[40];std::snprintf(name,sizeof name,"method-%u",m);snapshot(name,g,v);}g.method=Method::Shallow;
     g.spot=1;snapshot("bay",g,v);g.spot=2;snapshot("night",g,v);
     v.knownObjects=(1u<<10)|(1u<<16)|(1u<<5)|(1u<<23);g.spot=1;snapshot("changed-bay",g,v);v.knownObjects=0;
-    g.stage=Stage::Notes;v.notebookSave=SaveState::Ready;v.reading.addEvent(unsigned(Anomaly::Knock));g.notePage=2;snapshot("event-note",g,v);g.stage=Stage::Shore;
+    g.stage=Stage::Notes;v.notebookSave=SaveState::Ready;v.reading.addEvent(unsigned(Anomaly::Knock));g.notePage=3;snapshot("event-note",g,v);g.stage=Stage::Shore;
 
     hook(g);g.fish=.64;g.rod=.56;g.progress=.57;g.tension=.6;snapshot("fight",g,v);
     g.surgeLeft=1;g.tension=.83;snapshot("surge",g,v);
     g.stage=Stage::Bite;snapshot("bite",g,v);
     g.stage=Stage::Caught;g.anomaly=Anomaly::None;g.caught=generate(987,1);g.landed=3;snapshot("caught",g,v);
+    {
+        Game check;ViewState grouped=v;check.stage=Stage::Book;grouped.bookValid=true;
+        grouped.bookCatch.form=ObjectFlag|2;grouped.bookCatch.millimetres=120;
+        grouped.groups=40;grouped.bookGroup=18;grouped.variants=7;
+        grouped.reading.read(grouped.bookCatch,0,0,true);snapshot("book-group",check,grouped);
+        check.stage=Stage::Caught;check.caught.form=speciesForm(0);check.caught.millimetres=321;
+        grouped.sizeRecord=true;grouped.fresh=false;snapshot("size-record",check,grouped);
+    }
     g.stage=Stage::Help;snapshot("help",g,v);
+    g.stage=Stage::Notes;g.notePage=2;snapshot("battery-info",g,v);
+    for(int mv:{-1,3300,3700,4100}){v.battery.update(mv);g.stage=Stage::Shore;char name[40];std::snprintf(name,sizeof name,"battery-%d",mv);snapshot(name,g,v);}v.battery.update(3700);
+    g.stage=Stage::Caught;g.anomaly=Anomaly::Broadcast;g.eventCode=6;v.newAnnotations=1;snapshot("new-link-event",g,v);v.newAnnotations=0;g.anomaly=Anomaly::None;
     g.stage=Stage::Book;v.bookValid=true;v.bookCatch=generate(1034,0);v.bookIndex=5;snapshot("book",g,v);
     g.stage=Stage::Waiting;g.age=1;g.anomaly=Anomaly::DoubleReflection;snapshot("event-reflection",g,v,1000);
     g.stage=Stage::Caught;g.anomaly=Anomaly::FalseClock;g.caught.form=ObjectFlag+259;snapshot("event-clock",g,v);

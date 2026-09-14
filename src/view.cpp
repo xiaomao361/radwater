@@ -178,7 +178,7 @@ static void outline(Canvas& c,int x,int y,int w,int h,uint16_t col) {
     c.line(x,y,x,y+h-1,col);c.line(x+w-1,y,x+w-1,y+h-1,col);
 }
 static void tabs(Canvas& c,const char* title,const char* status){
-    c.rect(0,0,240,20,ink);c.text(8,4,title,cream);c.text(232-c.textWidth(status),4,status,gold);c.line(8,19,231,19,muted);
+    c.rect(0,0,240,20,ink);c.text(8,4,title,cream);c.text(172-c.textWidth(status),4,status,gold);c.line(8,19,231,19,muted);
 }
 static void footer(Canvas& c,const char* s){c.rect(0,119,240,16,ink);c.line(8,119,231,119,grid);c.center(122,s,cream);}
 static const char* saveLabel(SaveState s){switch(s){case SaveState::Ready:return "收藏已保存";case SaveState::Missing:return "无SD：本局不存档";case SaveState::Corrupt:return "存档异常：只读";default:return "写入失败：未保存";}}
@@ -343,7 +343,7 @@ static void quietShore(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
         c.rect(61,119,119,15,ink);c.center(121,"空格抛竿 H 帮助",muted);
     }
     // Quiet presentation must not conceal persistence failures.
-    if(v.save!=SaveState::Ready){c.rect(0,0,240,18,ink);c.center(3,saveLabel(v.save),cream);}
+    if(v.save!=SaveState::Ready){c.rect(0,0,240,18,ink);c.text(6,3,saveLabel(v.save),cream);}
 }
 void syncDossierPages(Game& g,const ViewState& v){
     bool book=g.stage==Stage::Book||(g.stage==Stage::Dossier&&g.dossierBook);
@@ -351,15 +351,21 @@ void syncDossierPages(Game& g,const ViewState& v){
     g.dossierPages=f.object()?(annotationFor(f,v.knownObjects)?4:3):(fishAnnotation(f,v.knownObjects)?2:1);
     if(g.dossierPage>=g.dossierPages)g.dossierPage=0;
 }
-void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
+static void drawContent(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
     char b[128];c.clear(ink);
     if(g.stage==Stage::Shore){quietShore(c,g,v,ms);return;}
     if(g.stage==Stage::Notes){
-        unsigned n=g.notePage%(2+v.reading.count);
-        std::snprintf(b,sizeof b,"%u/%u",n+1,2+v.reading.count);tabs(c,"岸边手记",b);
+        unsigned n=g.notePage%(3+v.reading.count);
+        std::snprintf(b,sizeof b,"%u/%u",n+1,3+v.reading.count);tabs(c,"岸边手记",b);
         if(n==0){
             page(c,{"调查摘记",{"只记录已经见过的材料。",v.knownObjects&(1u<<10)?"工牌：正反面属于同一个人。":"工牌：尚未发现。",v.knownObjects&(1u<<16)?"合照：十二个名字，十三个人。":"合照：尚未发现。",v.knownObjects&(1u<<11)?"怀表：沈在额外一格里签过退。":"怀表：尚未发现。",v.knownObjects&(1u<<23)?"铅封：夹痕位于封口内侧。":"铅封：尚未发现。",v.notebookSave==SaveState::Ready?"手记存档就绪，可随时放下。":v.notebookSave==SaveState::Missing?"无SD：手记仅保留本次开机。":"手记保存异常，本次修改未存。"}});
-        }else if(n==1)page(c,siteDossier(g.spot));else page(c,eventDossier(v.reading.events[n-2]));
+        }else if(n==1)page(c,siteDossier(g.spot));
+        else if(n==2){
+            char voltage[64];
+            if(v.battery.millivolts<0)std::snprintf(voltage,sizeof voltage,"电压暂不可用");
+            else std::snprintf(voltage,sizeof voltage,"电压 %d.%03d V",v.battery.millivolts/1000,v.battery.millivolts%1000);
+            page(c,{"电池与充电",{voltage,"电量由电压估算，仅供参考。","充电时请将侧面开关拨到 ON。","插入 USB-C 即可供电充电。","设备无法读取实际充电状态。","请勿用电量跳变判断是否充满。"}});
+        }else page(c,eventDossier(v.reading.events[n-3]));
         footer(c,"空格下一页 A 上一页 N 返回");return;
     }
     if(g.stage==Stage::Dossier){
@@ -369,24 +375,28 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
         footer(c,v.linkAvailable?"空格翻页 T 关联 R 返回":"空格翻页 R 返回");return;
     }
     if(g.stage==Stage::Help){
-        tabs(c,"余波 / RADWATER","操作指南");
-        page(c,{"在这里歇一会儿",{"空格抛竿，咬钩后再按一次。","按住收线，挣扎时松一下。","B 图鉴 R 档案 U 找未读","N 手记 T 关联 C 续读","F 钓法 1/2/3 水域 M 音","P 暂停；来不及咬钩会等你。"}});
+        tabs(c,"余波","操作指南");
+        page(c,{"在这里歇一会儿",{"空格抛竿，咬钩后再按一次。","按住收线，挣扎时松一下。","B 收藏 R 档案 U 读未读","N 手记 T 关联 C 续读 V 外观","F 钓法 1/2/3 水域 M 音","P 暂停；来不及咬钩会等你。"}});
         footer(c,"空格 / H 返回");return;
     }
     if(g.stage==Stage::Book||g.stage==Stage::Caught){
         bool book=g.stage==Stage::Book;const auto& f=book?v.bookCatch:g.caught;
-        std::snprintf(b,sizeof b,"%lu/%lu %s",(unsigned long)v.bookIndex+1,(unsigned long)v.discoveries,v.unread?"未读":"已读");
+        const char* readingStatus=v.reading.mainRead(f)?(v.reading.noteUnread(f,v.knownObjects)?"新批注":"已读"):v.reading.started(f)?"读到一半":"未读";
+        std::snprintf(b,sizeof b,"%s %u/%u",readingStatus,v.bookGroup+1,v.groups);
         tabs(c,book?"收藏柜":"今日打捞",book?b:!v.saved?"未保存":v.fresh?"新发现":"又见面了");
         if(book&&!v.bookValid){c.center(49,v.discoveries?"图鉴读取失败":"收藏柜还是空的",cream);c.center(72,"钓获并保存后再来看看",muted);footer(c,"B 返回水域");return;}
         if(book){
             catchName(f,b,sizeof b);c.text(8,24,b,cream);drawCatch(c,f,125,83,2);
-            std::snprintf(b,sizeof b,"%lu.%lu cm",(unsigned long)f.millimetres/10,(unsigned long)f.millimetres%10);c.text(232-c.textWidth(b),24,b,muted);
-            footer(c,"A/D 选择 R 阅读 U 未读 B 返回");return;
+            uint32_t size=f.object()?f.millimetres:v.bestSize;
+            std::snprintf(b,sizeof b,"%s%lu.%lu cm",f.object()?"":"最大 ",(unsigned long)size/10,(unsigned long)size%10);c.text(232-c.textWidth(b),24,b,muted);
+            if(f.object()){std::snprintf(b,sizeof b,"V %u种",v.variants);c.text(8,43,b,muted);}
+            footer(c,"A/D 分类 R 阅读 U 未读 B 返回");return;
         }
         drawCatch(c,f,56,51,1);catchName(f,b,sizeof b);c.text(110,28,b,cream);
-        std::snprintf(b,sizeof b,"%lu.%lu cm",(unsigned long)f.millimetres/10,(unsigned long)f.millimetres%10);c.text(110,44,b,muted);
-        if(g.anomaly!=Anomaly::None)std::snprintf(b,sizeof b,"N %s",eventName(g.anomaly));
-        else std::snprintf(b,sizeof b,"%s",v.newAnnotations?"有新关联批注":"R 阅读完整档案");
+        std::snprintf(b,sizeof b,"%lu.%lu cm%s",(unsigned long)f.millimetres/10,(unsigned long)f.millimetres%10,v.sizeRecord?" 新纪录":"");c.text(110,44,b,muted);
+        if(v.newAnnotations)std::snprintf(b,sizeof b,"%s",g.anomaly!=Anomaly::None?"U 新批注 N 事件":"U 阅读新关联批注");
+        else if(g.anomaly!=Anomaly::None)std::snprintf(b,sizeof b,"N %s",eventName(g.anomaly));
+        else std::snprintf(b,sizeof b,"R 阅读完整档案");
         c.text(110,59,b,gold);
         auto card=dossier(f,0,v.knownObjects);unsigned start=f.object()?1:0;
         if(!v.fresh&&!f.object()&&fishAnnotation(f,v.knownObjects)){card=*fishAnnotation(f,v.knownObjects);start=0;}
@@ -418,5 +428,20 @@ void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
         footer(c,"空格抛竿 F 钓法 H 帮助");
     }
     if(g.paused){c.rect(27,43,186,59,ink);outline(c,27,43,186,59,gold);c.center(48,"歇一会儿",cream);c.center(66,"鱼和进度都在这里等你",muted);c.center(85,"P 继续",gold);}
+}
+
+bool animatedView(const Game& g){
+    return g.stage==Stage::Shore||(!g.paused&&(g.stage==Stage::Waiting||g.stage==Stage::Bite||g.stage==Stage::Fight||g.stage==Stage::Lost));
+}
+void draw(Canvas& c,const Game& g,const ViewState& v,uint32_t ms){
+    drawContent(c,g,v,ms);
+    char b[24];
+    if(v.battery.percent<0)std::snprintf(b,sizeof b,"--");
+    else std::snprintf(b,sizeof b,"~%d%%",v.battery.percent);
+    c.rect(178,0,62,18,ink);
+    uint16_t color=v.battery.percent>=0&&v.battery.percent<=15?gold:muted;
+    outline(c,180,5,12,7,color);c.rect(192,7,2,3,color);
+    if(v.battery.percent>=0)c.rect(182,7,(v.battery.percent*8+99)/100,3,color);
+    c.text(237-c.textWidth(b),3,b,color);
 }
 }

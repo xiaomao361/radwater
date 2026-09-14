@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-version = '0.4.5'
+version = '0.5.1'
 name = f'Radwater-ADV-v{version}.bin'
 raw = (root/'.pio/build/cardputer-adv/firmware.bin').read_bytes()
 assert raw[0] == 0xE9 and len(raw) < 2097152 and int.from_bytes(raw[12:14], 'little') == 9
@@ -30,7 +30,7 @@ assert len(raw) == checksum_pos + 33
 buildlog = (root/'build/firmware-build.log').read_text()
 tests = (root/'build/test-results.txt').read_text()
 assert '[SUCCESS]' in buildlog
-assert all(marker in tests for marker in ['sound:', 'quiet arrival:', 'renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
+assert all(marker in tests for marker in ['optimization:', 'sound:', 'quiet arrival:', 'renderer:', 'journal:', 'compatibility:', 'objects: 24', 'events:', 'annotations:', 'method play:', 'story edition:', 'notebook:', 'fish silhouettes: 16', 'journal CLI: C++ mixed'])
 flash = re.search(r'Flash:.*used (\d+) bytes', buildlog)
 ram = re.search(r'RAM:.*used (\d+) bytes', buildlog)
 manifest = {
@@ -39,13 +39,14 @@ manifest = {
     'firmware': name, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest(),
     'static_ram_bytes': int(ram[1]), 'linked_flash_bytes': int(flash[1]), 'build_partition_bytes': 2097152,
     'sd_journal': '/PocketFishing/catches-v1.pfj', 'record_bytes': 32,
-    'reading_journal': '/PocketFishing/reading-v1.pfn', 'reading_record_bytes': 96, 'recent_events': 12,
+    'reading_journal': '/PocketFishing/reading-v2.pfn', 'reading_record_bytes': 128, 'recent_events': 12,
     'fish_species': 16, 'fish_dossiers': 16, 'fish_annotations': 16,
     'legacy_fish_parameter_combinations': 131072, 'legacy_species_mapping': 'body | ((ornament & 1) << 3)',
     'object_parameter_combinations': 768, 'object_base_types': 24, 'object_dossiers': 48,
     'linked_evidence_pages': 24, 'annotation_pairs': 12,
     'generator_version': 3, 'readable_generator_versions': [1, 2, 3],
-    'downgrade': 'v0.3.0 and earlier stop at first v3 record; preserve new journal and use pre-upgrade copy',
+    'downgrade': 'v0.4.x reads catches but uses untouched old reading-v1.pfn; v0.3.0 and earlier stop at first v3 catch',
+    'catalogue_groups': 40, 'battery': 'ADC voltage estimate, 5 percent steps; charging status unsupported',
     'dossier_pages': {'fish': 1, 'fish_with_annotation': 2, 'object': 3, 'object_with_annotation': 4},
     'sound': 'procedural 8kHz mono, four 120ms cues, muted by default',
     'sound_pcm_ram_bytes': 3840,
@@ -69,8 +70,8 @@ else:
 将 {name} 放入已有 FAT32 SD 卡，在已有 M5Launcher 中选中安装。
 这是 app-only 镜像，不包含 bootloader 或分区表；不需要额外资源文件。
 
-改名前后的存档路径保持 /PocketFishing/，v0.4.0与本版互相兼容。
-升级前备份 /PocketFishing/catches-v1.pfj。
+渔获与v0.4.0之后版本兼容。新版手记独立保存，回退旧版看不到新增阅读进度。
+升级前备份整个 /PocketFishing/。
 旧收藏直接读取、原样保留；鱼按16种归类展示，数量变小不等于原始记录被删除。
 新渔获使用生成器v3，v0.3.0及更早固件不认识，会在首条v3处停止读取。
 如需回退，请保留完整新档并使用升级前副本；不要用旧工具修复新版日志。
@@ -80,7 +81,9 @@ else:
 空格抛竿，咬钩再按一次。按住收线，看到挣扎松一下，再按住。
 新增落水、咬钩、鱼/旧物上岸短音效。默认静音，M开启或立即静音；无额外素材。
 不用A/D追鱼。持续按住仍会断线；来不及提竿会暂停，P继续。
-R读档案，B收藏，U找未读，T关联物品，C继续上次阅读。
+R读档案，B收藏，A/D按类别选择，V查看同类外观；U直接读未读，T关联物品，C继续上次阅读。
+物品三页正文分别记录；鱼显示最大尺寸纪录。右上角~为电压估算电量，N第三页看电压。
+ADV充电需侧面开关ON后接USB-C，无法读取实际充电状态。
 N看手记与最近12条随机事件；水下敲门后可在结果页E回应，也可忽略。
 F切换钓法，1/2/3水域，H帮助，M声音，Backspace返回。
 
@@ -89,7 +92,8 @@ F切换钓法，1/2/3水域，H帮助，M声音，Backspace返回。
 灰绿水面、沙黄暮色、锈色设施与纸面档案，无角色或小猫。
 
 收藏：/PocketFishing/catches-v1.pfj，每条32字节。
-手记：/PocketFishing/reading-v1.pfn，每次96字节快照。
+手记：/PocketFishing/reading-v2.pfn，每次128字节快照。
+仅在新文件不存在时只读导入旧手记。旧物品已读只导入为第一页打开过；旧文件不改写。
 没有SD时可玩但不保留；两个文件独立显示保存失败，不自动截断原档。
 C恢复已保存的阅读页，不恢复关机前的收线进度。
 
@@ -98,7 +102,7 @@ C恢复已保存的阅读页，不恢复关机前的收线进度。
 附带图片和GIF均为同源电脑渲染，不是真机实拍。
 更多说明见开发与玩法说明.md。
 ''')
-entries = [name, 'manifest.json', 'SHA256SUMS.txt', '安装说明.txt', 'screens.png', 'fish.png', 'specimens.png', 'objects.png', 'lore.png', 'features.png', 'gameplay.gif', 'arrival.png', 'arrival.gif', 'rest-240x135.png']
+entries = [name, 'manifest.json', 'SHA256SUMS.txt', '安装说明.txt', 'screens.png', 'fish.png', 'specimens.png', 'objects.png', 'lore.png', 'features.png', 'gameplay.gif', 'arrival.png', 'arrival.gif', 'rest-240x135.png', 'optimization.png']
 archive = dist/f'Radwater-ADV-v{version}.zip'
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
     for entry in entries:

@@ -2,6 +2,7 @@
 #include "game.h"
 #include "journal.h"
 #include "notebook.h"
+#include "battery.h"
 #include <cstdint>
 namespace pond {
 constexpr int Width = 240, Height = 135;
@@ -21,6 +22,9 @@ public:
     void center(int y, const char* s, uint16_t c) { text((Width - textWidth(s)) / 2, y, s, c); }
 };
 struct ViewState {
+    BatteryState battery;
+    unsigned bookGroup=0,groups=0,variants=1;
+    uint32_t bestSize=0;bool sizeRecord=false;
     SaveState save = SaveState::Missing;
     uint32_t discoveries = 0, savedCatches = 0, bookIndex = 0;
     uint32_t knownObjects = 0, knownFish = 0, newAnnotations = 0;
@@ -32,5 +36,6 @@ struct ViewState {
 };
 void drawCatch(Canvas& c, const Catch& fish, int x, int y, int scale = 1);
 void syncDossierPages(Game& game, const ViewState& view);
+bool animatedView(const Game& game);
 void draw(Canvas& canvas, const Game& game, const ViewState& view, uint32_t ms);
 }

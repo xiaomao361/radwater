@@ -1,12 +1,14 @@
 # Radwater 固件
 
-当前版本：**v0.4.5 — 轻量水边音效**，Cardputer ADV / ESP32-S3，M5Launcher app-only。
+当前版本：**v0.5.1 — 收藏、阅读与电量**，Cardputer ADV / ESP32-S3，M5Launcher app-only。
 
-- [BIN](Radwater-ADV-v0.4.5.bin)
-- 621232 字节，比 v0.4.4 增加384字节
-- SHA256：`eac67af96f14c6f71b1d1d3287254b446cbc34654d3f9654e6dde7598fb8b287`
-- [校验清单](SHA256SUMS.txt) · [构建记录](../releases/v0.4.5.json)
+- [BIN](Radwater-ADV-v0.5.1.bin)
+- 635168 字节，比v0.4.5增加13936字节
+- SHA256：`093b3ed13e9c600cd8014cb55d42600d4a9cdbbc40b53ca43cbf4eaed677a2e5`
+- [校验清单](SHA256SUMS.txt) · [构建记录](../releases/v0.5.1.json)
 
-按 M 开启声音，默认静音。无需额外音频素材，将 BIN 放入 SD 卡由已有 M5Launcher 安装；v0.4.0起存档兼容。升级前保留 `/PocketFishing/` 副本。
+B收藏、A/D分类、V同类外观、U直达未读；物品逐页续读，鱼有最大尺寸纪录。右上角电量为电压估算；N手记第三页查看电压。ADV需侧面开关ON后接USB-C充电，软件不能读取充电状态。
 
-此前镜像保留。新版通过主机测试、编译及打包检查，设备音色待试听。
+升级前备份整个 `/PocketFishing/`。旧渔获保持兼容；新版手记`reading-v2.pfn`只读导入旧手记，旧文件保留。回退v0.4.x后看不到新版新增阅读进度。
+
+此前镜像保留。本版完成主机测试、编译、打包和同源画面检查，设备显示、电量和按键体验待验收。
